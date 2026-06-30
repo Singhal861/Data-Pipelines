@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: singhal
+    schema: fifa_worldcup_bronze
+    description: >
+      Bronze layer tables containing raw World Cup 2026 data.
+      Ingested and maintained upstream by Python notebooks.
+    
+    tables:
+      - name: players
+        description: Raw player roster data with cumulative stats
+        
+      - name: teams
+        description: Raw team information and group assignments
+        
+      - name: matches
+        description: Raw match results with scores and goal events
+        
+      - name: group_standings
+        description: Raw group stage standings with points and rankings
+        
+      - name: knockout_bracket
+        description: Raw knockout tournament bracket structure
+        
+      - name: stadiums
+        description: Raw venue and stadium information

@@ -1,0 +1,25 @@
+name: 'fifa_worldcup'
+version: '1.0.0'
+
+profile: 'singhal_fifa_dev'  # ← Must match profile name above
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  fifa_worldcup:
+    +materialized: table
+    +pre-hook:
+      - "USE CATALOG singhal"
+    silver:
+      +database: singhal
+      +schema: fifa_worldcup_silver

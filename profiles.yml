@@ -1,0 +1,10 @@
+fifa_worldcup:
+  target: default
+  outputs:
+    default:
+      type: databricks
+      catalog: singhal
+      schema: default  # ← Use 'default', not 'fifa_worldcup_silver'
+      host: dbc-daab0fab-500c.cloud.databricks.com
+      http_path: /sql/1.0/warehouses/YOUR_WAREHOUSE_ID
+      token: "{{ env_var('DBT_DATABRICKS_TOKEN') }}"
