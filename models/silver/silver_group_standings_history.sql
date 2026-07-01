@@ -111,7 +111,7 @@ SELECT
     points,
     rank,
     valid_from,
-    NULL AS valid_to,
+    CAST(NULL AS TIMESTAMP) AS valid_to,
     TRUE AS is_current
 FROM with_rank
 
