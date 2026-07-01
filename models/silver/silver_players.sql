@@ -18,5 +18,6 @@ FROM {{ source('bronze', 'players') }}
 WHERE player_id IS NOT NULL           
   AND TRIM(player_id) != ''
   AND player_id != 'null'
+  AND LENGTH(TRIM(player_id)) > 5
 -- Deduplicate: keep latest record per player
 QUALIFY ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY ingested_at DESC) = 1

@@ -1,40 +1,104 @@
 version: 2
 
 models:
-  - name: silver_player_stats_history
+  - name: silver_matches
     description: >
-      Player stats progression over time (SCD Type 2).
-      Tracks goals, assists, and ratings throughout tournament.
-      Only inserts new snapshots when stats actually change.
+      All 104 World Cup 2026 matches in one table — group stage unioned
+      with knockout stage. Single source of truth for match facts.
+      
+      Group stage: winner calculated from scores (draws possible).
+      Knockout stage: winner from API (includes penalty shootout results).
     
-    tests:
-      - dbt_utils.expression_is_true:
-          expression: "(SELECT COUNT(DISTINCT player_id) FROM {{ ref('silver_player_stats_history') }}) > 0"
-          config:
-            severity: error
-            
     columns:
-      - name: player_id
-        description: Player identifier (links to silver_players)
+      - name: match_id
+        description: Unique match identifier
         tests:
-          - not_null:
-              config:
-                severity: error
+          - unique
+          - not_null
+          
+      - name: stage
+        description: Tournament stage (Group Stage, Round of 16, Quarter Final, etc.)
+        tests:
+          - accepted_values:
+              values: ['Group Stage', 'Round of 32', 'Round of 16', 'Quarter Final', 
+                       'Semi Final', 'Third Place', 'Final']
+              
+      - name: is_finished
+        description: Whether the match has been completed
+        tests:
+          - not_null
+
+  - name: silver_knockout_bracket
+    description: >
+      Bracket structure only. Use this for the tournament tree visualization.
+      Join to silver_matches on match_id to get scores and team names.
+      
+      feeds_into_position: Shows where the winner advances (the key field for drawing bracket trees).
+    
+    columns:
+      - name: match_id
+        description: Match identifier (links to silver_matches)
+        tests:
+          - unique
+          - not_null
+          
+      - name: round
+        description: Round code (R32,R16, QF, SF, Final, 3rd)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['R32', 'R16', 'QF', 'SF', 'Final', '3rd']
+              
+      - name: feeds_into_position
+        description: Bracket position where winner advances (NULL for final/third place)
+
+  - name: silver_goal_events
+    description: >
+      Normalized goal events - one row per goal scored.
+      Parsed from home_scorers/away_scorers JSON arrays in bronze.matches.
+      
+      Enables match timelines, goal pattern analysis, and event-level insights.
+      Matches with no goals simply have zero rows here.
+      
+      Note: scorer_name is parsed from strings like "Lionel Messi 23' (p)".
+      No player_id available - use silver_players.goals_scored for accurate 
+      top scorer leaderboards with IDs.
+    
+    columns:
+      - name: goal_event_id
+        description: Unique identifier for each goal event (MD5 hash)
+        tests:
+          - unique
+          - not_null
+          
+      - name: match_id
+        description: Match where goal was scored (links to silver_matches)
+        tests:
+          - not_null
           - relationships:
-              to: ref('silver_players')
-              field: player_id
-              config:
-                severity: error
-                
-      - name: goals_scored
-        description: Cumulative goals scored (from API)
+              to: ref('silver_matches')
+              field: match_id
+              
+      - name: scorer_name
+        description: Player who scored (parsed from scorer string, no player_id)
         tests:
-          - not_null:
-              config:
-                severity: error
-          - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 20
-              inclusive: true
-              config:
-                severity: warn
+          - not_null
+          
+      - name: minute
+        description: Match minute when goal was scored (1-90+)
+        tests:
+          - not_null
+          
+      - name: is_penalty
+        description: Whether goal was scored from a penalty kick
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: is_home_goal
+        description: Whether goal was scored by the home team
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]

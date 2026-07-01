@@ -61,11 +61,12 @@ knockout_matches AS (
         
         -- Normalize round codes to readable stage names
         CASE
-            WHEN round = 'R16' THEN 'Round of 16'
-            WHEN round = 'QF' THEN 'Quarter Final'
-            WHEN round = 'SF' THEN 'Semi Final'
-            WHEN round = 'F' THEN 'Final'
-            WHEN round = '3rd' THEN 'Third Place'
+            WHEN UPPER(round) = 'R32' THEN 'Round of 32'
+            WHEN UPPER(round) = 'R16' THEN 'Round of 16'
+            WHEN UPPER(round) = 'QF' THEN 'Quarter Final'
+            WHEN UPPER(round) = 'SF' THEN 'Semi Final'
+            WHEN UPPER(round) = 'FINAL' THEN 'Final'
+            WHEN UPPER(round) = '3RD' THEN 'Third Place'
             ELSE round
         END AS stage,
         
