@@ -10,7 +10,7 @@ SELECT
     CAST(fifa_name AS STRING) AS name,
     CAST(city_en AS STRING) AS city,
     'USA/Mexico/Canada' AS country,
-    NULL AS capacity,
+    CAST(NULL AS INT) AS capacity,
     CURRENT_TIMESTAMP() AS last_updated
     
 FROM {{ source('bronze', 'stadiums') }}
