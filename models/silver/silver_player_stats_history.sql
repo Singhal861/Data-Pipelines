@@ -27,7 +27,9 @@ WITH latest_bronze AS (
         ingested_at AS valid_from
         
     FROM {{ source('bronze', 'players') }}
-    
+    WHERE player_id IS NOT NULL           -- ← ADD THESE 3 LINES
+      AND TRIM(player_id) != ''
+      AND player_id != 'null'
     -- Always get latest snapshot from bronze
     QUALIFY ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY ingested_at DESC) = 1
 )

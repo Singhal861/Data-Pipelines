@@ -10,6 +10,7 @@ WITH home_goals AS (
         match_id,
         home_team_id AS team_id,
         home_team_name AS team_name,
+        TRUE AS is_home_goal,  -- ← Directly set to TRUE for home goals
         EXPLODE(
             FROM_JSON(
                 REGEXP_REPLACE(REGEXP_REPLACE(home_scorers, '\\{', '['), '\\}', ']'),
@@ -27,6 +28,7 @@ away_goals AS (
         match_id,
         away_team_id AS team_id,
         away_team_name AS team_name,
+        FALSE AS is_home_goal,  -- ← Directly set to FALSE for away goals
         EXPLODE(
             FROM_JSON(
                 REGEXP_REPLACE(REGEXP_REPLACE(away_scorers, '\\{', '['), '\\}', ']'),
@@ -51,7 +53,7 @@ SELECT
     team_id,
     team_name,
     
-    -- Parse player name
+    -- Parse player name (everything before the minute)
     TRIM(REGEXP_EXTRACT(goal_string, '^([^0-9]+)', 1)) AS scorer_name,
     
     -- Parse minute
@@ -59,6 +61,9 @@ SELECT
     
     -- Detect penalty
     CASE WHEN goal_string LIKE '%(p)%' THEN TRUE ELSE FALSE END AS is_penalty,
+    
+    -- Home/Away flag (already set in CTEs above)
+    is_home_goal,
     
     goal_string AS goal_string_raw,
     CURRENT_TIMESTAMP() AS ingested_at

@@ -15,6 +15,8 @@ SELECT
     CURRENT_TIMESTAMP() AS last_updated
     
 FROM {{ source('bronze', 'players') }}
-
+WHERE player_id IS NOT NULL           
+  AND TRIM(player_id) != ''
+  AND player_id != 'null'
 -- Deduplicate: keep latest record per player
 QUALIFY ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY ingested_at DESC) = 1
