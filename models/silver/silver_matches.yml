@@ -20,7 +20,8 @@ models:
         description: Tournament stage (Group Stage, Round of 16, Quarter Final, etc.)
         tests:
           - accepted_values:
-              values: ['Group Stage', 'Round of 32', 'Round of 16', 'Quarter Final', 
+              arguments:
+                values: ['Group Stage', 'Round of 32', 'Round of 16', 'Quarter Final', 
                        'Semi Final', 'Third Place', 'Final']
               
       - name: is_finished
@@ -47,7 +48,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['R32', 'R16', 'QF', 'SF', 'Final', '3rd']
+              arguments:
+                values: ['R32', 'R16', 'QF', 'SF', 'Final', '3rd']
               
       - name: feeds_into_position
         description: Bracket position where winner advances (NULL for final/third place)
@@ -94,11 +96,13 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [true, false]
+              arguments:
+                values: [true, false]
               
       - name: is_home_goal
         description: Whether goal was scored by the home team
         tests:
           - not_null
           - accepted_values:
-              values: [true, false]
+              arguments:
+                values: [true, false]
