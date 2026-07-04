@@ -1,0 +1,136 @@
+version: 2
+
+models:
+  - name: gold_match_schedule
+    description: >
+      Live and upcoming matches for dashboard (Requirements #3 and #4).
+      Supports both knockout (Req #3) and group stage (Req #4) via is_knockout filter.
+      Includes team logos, match-level top scorers, UTC/local times, stadium info.
+    columns:
+      - name: match_id
+        description: Unique match identifier
+      - name: match_status
+        description: Live, Upcoming, or Finished
+      - name: is_knockout
+        description: TRUE for knockout matches, FALSE for group stage
+      - name: home_team_logo
+        description: Home team flag/logo
+      - name: away_team_logo
+        description: Away team flag/logo
+      - name: home_top_scorer_name
+        description: Top scorer in THIS match for home team
+      - name: away_top_scorer_name
+        description: Top scorer in THIS match for away team
+      - name: match_datetime_utc
+        description: Match time in UTC
+      - name: stadium_name
+        description: Venue name
+      - name: stadium_city
+        description: City location
+
+  - name: gold_player_leaderboard
+    description: >
+      Top 10 scorers for dashboard (Requirement #2).
+      Includes goals, assists, rating, minutes, matches, highest goals vs team.
+      Uses player_stats_history (current snapshot) and goal_events.
+    columns:
+      - name: player_id
+        description: Unique player identifier
+      - name: player_name
+        description: Player full name
+      - name: goals_scored
+        description: Total tournament goals
+      - name: assists
+        description: Total tournament assists
+      - name: rating
+        description: Player rating out of 10
+      - name: highest_goals_vs_team
+        description: Team against which player scored most goals
+
+  - name: gold_golden_boot_race
+    description: >
+      Match-by-match goal progression for top 3 scorers (Requirement #6).
+      Timeline data for line graph visualization.
+      Handles ties via DENSE_RANK (1,1,2 or 1,2,2 or 1,2,3,3).
+    columns:
+      - name: player_name
+        description: Player name
+      - name: match_sequence
+        description: Match number in tournament chronology
+      - name: goals_cumulative
+        description: Total goals up to this match
+      - name: rank_at_match
+        description: Rank position at this match (1-3, with ties)
+
+  - name: gold_points_table
+    description: >
+      Group standings with qualification status (Requirement #5).
+      Shows points, wins, losses, goal difference, rank.
+    columns:
+      - name: rank_overall
+        description: Overall tournament ranking by points
+      - name: rank_in_group
+        description: Position within group (1-4)
+      - name: team_logo
+        description: Team flag/emblem
+      - name: points
+        description: Total points (3 per win, 1 per draw)
+      - name: qualification_status
+        description: Qualified, Disqualified, or In Progress
+
+  - name: gold_tournament_bracket
+    description: >
+      Knockout bracket structure for visualization (Requirement #1).
+      All stages from Round of 32 through Final.
+    columns:
+      - name: match_id
+        description: Match identifier
+      - name: round
+        description: Tournament round (R32, R16, QF, SF, Final, 3rd)
+      - name: home_team_name
+        description: Home team name
+      - name: away_team_name
+        description: Away team name
+      - name: winner_name
+        description: Match winner (NULL if not finished)
+
+  - name: gold_team_summary
+    description: >
+      Team aggregate statistics for dashboard.
+      Wins, losses, goals for/against, clean sheets, top assist provider.
+    columns:
+      - name: team_name
+        description: Team name
+      - name: team_logo
+        description: Team flag/emblem
+      - name: total_wins
+        description: Total wins in tournament
+      - name: total_losses
+        description: Total losses
+      - name: goals_for
+        description: Total goals scored
+      - name: goals_against
+        description: Total goals conceded
+      - name: clean_sheets
+        description: Matches with zero goals conceded
+
+  - name: gold_team_goals
+    description: >
+      Match-by-match goal details per team.
+      Exposes individual goals without name aggregation.
+    columns:
+      - name: team_name
+        description: Team name
+      - name: match_id
+        description: Match identifier
+      - name: scorer_name
+        description: Player who scored
+      - name: minute
+        description: Goal minute
+      - name: is_penalty
+        description: Whether goal was from penalty
+
+  - name: gold_tournament_summary
+    description: >
+      Tournament-wide aggregate statistics.
+      Total goals, matches, average goals per match, etc.

@@ -1,0 +1,60 @@
+version: 2
+
+# Gold Layer Test Configuration
+# Run with: dbt test --select tag:gold
+# These tests validate the 6 dashboard requirements
+
+tests:
+  - name: test_req1_tournament_bracket_completeness
+    description: |
+      Requirement 1: Tournament Bracket / Fixture Graphics
+      Validates: gold_tournament_bracket, gold_match_schedule, gold_team_summary
+      Checks: team logos, match times (UTC), stadium info, winner tracking
+    config:
+      tags: ['gold', 'requirement_1', 'tournament_bracket']
+      severity: error
+      
+  - name: test_req2_player_leaderboard_completeness
+    description: |
+      Requirement 2: Top 10 Scorers with Player Details & Spider Chart
+      Validates: gold_player_leaderboard
+      Checks: player images, stats completeness, spider chart percentiles, rankings
+    config:
+      tags: ['gold', 'requirement_2', 'player_leaderboard']
+      severity: error
+      
+  - name: test_req3_match_schedule_completeness
+    description: |
+      Requirement 3: Live Knockout Match Display
+      Validates: gold_match_schedule
+      Checks: team logos, live indicators, top scorers, UTC/local times, stadium info
+    config:
+      tags: ['gold', 'requirement_3', 'match_schedule']
+      severity: error
+      
+  - name: test_req4_team_performance_completeness
+    description: |
+      Requirement 4: Team Performance Details (on flag click)
+      Validates: gold_team_summary, gold_team_goals
+      Checks: team stats, top scorers, goal details with minutes
+    config:
+      tags: ['gold', 'requirement_4', 'team_performance']
+      severity: error
+      
+  - name: test_req5_points_table_completeness
+    description: |
+      Requirement 5: Group Stage Points Table
+      Validates: gold_points_table
+      Checks: group assignments, points calculation, rankings, goal difference
+    config:
+      tags: ['gold', 'requirement_5', 'points_table']
+      severity: error
+      
+  - name: test_req6_golden_boot_race_completeness
+    description: |
+      Requirement 6: Golden Boot Race Progression
+      Validates: gold_golden_boot_race
+      Checks: player images, progression tracking, medals, current top 3 flag
+    config:
+      tags: ['gold', 'requirement_6', 'golden_boot_race']
+      severity: error

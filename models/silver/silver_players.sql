@@ -10,6 +10,7 @@
 SELECT
     CAST(player_id AS STRING) AS player_id,
     CAST(player_name AS STRING) AS player_name,
+    CAST(player_logo AS STRING) AS player_logo,  -- ✅ Player image URL
     CAST(team_id AS STRING) AS team_id,
     CAST(team_name AS STRING) AS team_name,
     CURRENT_TIMESTAMP() AS last_updated

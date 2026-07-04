@@ -4,9 +4,11 @@
 )}}
 
 -- gold_match_schedule: Upcoming and Live Matches (Requirements #3, #4)
+-- Uses goal_events for MATCH-LEVEL top scorers (not tournament-level player_stats)
+-- Shows BOTH UTC and local time
 
 WITH timezone_ref AS (
-    SELECT * FROM {{ source('fifa_worldcup_gold', 'ref_stadium_enriched') }}
+    SELECT * FROM {{ source('silver', 'ref_stadium_enriched') }}
 ),
 
 parsed_matches AS (
@@ -42,36 +44,41 @@ with_team_logos AS (
         ht.team_logo AS home_team_logo,
         at.team_logo AS away_team_logo
     FROM parsed_matches pm
-    LEFT JOIN {{ ref('silver_teams') }} ht ON pm.home_team_id = ht.team_id
-    LEFT JOIN {{ ref('silver_teams') }} at ON pm.away_team_id = at.team_id
+    LEFT JOIN {{ ref('silver_teams') }} ht ON pm.home_team_name = ht.team_name
+    LEFT JOIN {{ ref('silver_teams') }} at ON pm.away_team_name = at.team_name
+),
+
+-- Get MATCH-LEVEL top scorers from goal_events (who scored most in THIS match)
+match_scorers AS (
+    SELECT
+        ge.match_id,
+        ge.team_id,
+        ge.scorer_name,
+        COUNT(*) AS goals_in_match,
+        ROW_NUMBER() OVER (
+            PARTITION BY ge.match_id, ge.team_id 
+            ORDER BY COUNT(*) DESC, MAX(ge.minute) DESC
+        ) AS scorer_rank
+    FROM {{ ref('silver_goal_events') }} ge
+    GROUP BY ge.match_id, ge.team_id, ge.scorer_name
 ),
 
 with_top_scorers AS (
     SELECT
         wtl.*,
-        home_scorer.player_name AS home_top_scorer_name,
-        home_scorer.goals AS home_top_scorer_goals,
-        away_scorer.player_name AS away_top_scorer_name,
-        away_scorer.goals AS away_top_scorer_goals
+        home_scorer.scorer_name AS home_top_scorer_name,
+        home_scorer.goals_in_match AS home_top_scorer_goals,
+        away_scorer.scorer_name AS away_top_scorer_name,
+        away_scorer.goals_in_match AS away_top_scorer_goals
     FROM with_team_logos wtl
-    LEFT JOIN (
-        SELECT 
-            team_id,
-            player_name,
-            goals_scored AS goals,
-            ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY goals_scored DESC) AS rn
-        FROM {{ ref('silver_player_stats_history') }}
-        WHERE is_current = TRUE
-    ) home_scorer ON wtl.home_team_id = home_scorer.team_id AND home_scorer.rn = 1
-    LEFT JOIN (
-        SELECT 
-            team_id,
-            player_name,
-            goals_scored AS goals,
-            ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY goals_scored DESC) AS rn
-        FROM {{ ref('silver_player_stats_history') }}
-        WHERE is_current = TRUE
-    ) away_scorer ON wtl.away_team_id = away_scorer.team_id AND away_scorer.rn = 1
+    LEFT JOIN match_scorers home_scorer 
+        ON wtl.match_id = home_scorer.match_id 
+        AND wtl.home_team_id = home_scorer.team_id 
+        AND home_scorer.scorer_rank = 1
+    LEFT JOIN match_scorers away_scorer 
+        ON wtl.match_id = away_scorer.match_id 
+        AND wtl.away_team_id = away_scorer.team_id 
+        AND away_scorer.scorer_rank = 1
 )
 
 SELECT
@@ -87,8 +94,8 @@ SELECT
             THEN 'Upcoming'
         ELSE 'Finished'
     END AS match_status,
-    match_datetime_utc,
-    match_date_local,
+    match_datetime_utc,  -- UTC time for standardized display
+    match_date_local,    -- Local time where match is played
     home_team_id,
     home_team_name,
     home_team_logo,

@@ -33,13 +33,16 @@ sources:
       - name: stadiums
         description: Raw venue and stadium information
 
-  - name: fifa_worldcup_gold
+  - name: silver
     database: singhal
-    schema: fifa_worldcup_gold
+    schema: fifa_worldcup_silver
     description: >
-      Gold layer reference tables containing static enrichment data.
-      Created manually in Databricks notebooks (not managed by dbt).
+      Silver layer reference tables that are NOT managed by dbt.
+      These are one-time static tables created manually via notebooks.
     
     tables:
       - name: ref_stadium_enriched
-        description: Reference table for stadium timezone and country mapping (UTC offsets, actual country names)
+        description: |
+          Static reference table for stadium timezone and country mapping.
+          Created manually in notebook (one-time table, not managed by dbt).
+          Used for UTC conversion in gold layer.

@@ -11,8 +11,22 @@ WITH group_matches AS (
         match_id,
         home_team_id,
         away_team_id,
-        home_team_name,
-        away_team_name,
+        
+        -- Normalize team names to match silver_teams
+        CASE 
+            WHEN home_team_name = 'United States' THEN 'USA'
+            WHEN home_team_name = "Ivory Coast" THEN "Cote d'Ivoire"
+            When home_team_name = 'Cape Verde' THEN 'Cabo Verde'    
+            ELSE home_team_name
+        END AS home_team_name,
+        
+        CASE 
+            WHEN away_team_name = 'United States' THEN 'USA'
+            WHEN away_team_name = "Ivory Coast" THEN "Cote d'Ivoire"
+            When away_team_name = 'Cape Verde' THEN 'Cabo Verde'
+            ELSE away_team_name
+        END AS away_team_name,
+        
         CAST(home_score AS INT) AS home_score,
         CAST(away_score AS INT) AS away_score,
         home_scorers,
@@ -31,11 +45,29 @@ WITH group_matches AS (
         
         -- Calculate winner for group matches (no penalties here, only knockouts)
         CASE
-            WHEN UPPER(finished) = 'TRUE' AND home_score > away_score THEN home_team_name
-            WHEN UPPER(finished) = 'TRUE' AND away_score > home_score THEN away_team_name
+            WHEN UPPER(finished) = 'TRUE' AND home_score > away_score THEN 
+                CASE 
+                    WHEN home_team_name = 'United States' THEN 'USA'
+                    WHEN home_team_name = "Ivory Coast" THEN "Cote d'Ivoire"
+                    When home_team_name = 'Cape Verde' THEN 'Cabo Verde'    
+                    ELSE home_team_name
+                END
+            WHEN UPPER(finished) = 'TRUE' AND away_score > home_score THEN 
+                CASE 
+                    WHEN away_team_name = 'United States' THEN 'USA'
+                    WHEN away_team_name = "Ivory Coast" THEN "Cote d'Ivoire"
+                    When away_team_name = 'Cape Verde' THEN 'Cabo Verde'
+                    ELSE away_team_name
+                END
             WHEN UPPER(finished) = 'TRUE' AND home_score = away_score THEN 'Draw'
             ELSE NULL
         END AS winner_team,
+        
+        CASE
+            WHEN UPPER(finished) = 'TRUE' AND home_score > away_score THEN home_team_id
+            WHEN UPPER(finished) = 'TRUE' AND away_score > home_score THEN away_team_id
+            ELSE NULL
+        END AS winner_team_id,
         
         NULL AS loser_team,
         NULL AS bracket_position,
@@ -50,8 +82,22 @@ knockout_matches AS (
         match_id,
         home_team_id,
         away_team_id,
-        home_team AS home_team_name,
-        away_team AS away_team_name,
+        
+        -- Normalize team names to match silver_teams
+        CASE 
+            WHEN home_team = 'United States' THEN 'USA'
+            WHEN home_team = "Ivory Coast" THEN "Cote d'Ivoire"
+            When home_team = 'Cape Verde' THEN 'Cabo Verde'
+            ELSE home_team
+        END AS home_team_name,
+        
+        CASE 
+            WHEN away_team = 'United States' THEN 'USA'
+            WHEN away_team = "Ivory Coast" THEN "Cote d'Ivoire"
+            When away_team = 'Cape Verde' THEN 'Cabo Verde'
+            ELSE away_team
+        END AS away_team_name,
+        
         home_score,
         away_score,
         home_scorers,
@@ -74,9 +120,23 @@ knockout_matches AS (
         stadium_id,
         is_finished,  -- Already boolean in bronze.knockout_bracket
         
-        -- Trust API's winner_team for knockouts (handles penalties!)
-        winner_team,
-        loser_team,
+        -- Normalize winner/loser team names
+        CASE 
+            WHEN winner_team = 'United States' THEN 'USA'
+            WHEN winner_team = "Ivory Coast" THEN "Cote d'Ivoire"
+            WHEN winner_team = 'Cape Verde' THEN 'Cabo Verde'
+            ELSE winner_team
+        END AS winner_team,
+        
+        winner_team_id,
+        
+        CASE 
+            WHEN loser_team = 'United States' THEN 'USA'
+            WHEN loser_team = "Ivory Coast" THEN "Cote d'Ivoire"
+            WHEN loser_team = 'Cape Verde' THEN 'Cabo Verde'
+            ELSE loser_team
+        END AS loser_team,
+        
         bracket_position,
         ingested_at
         

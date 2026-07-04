@@ -16,17 +16,18 @@ WITH match_stats AS (
 goal_stats AS (
     SELECT
         COUNT(*) AS total_goals,
-        COUNT(CASE WHEN event_type = 'Penalty' THEN 1 END) AS penalties_awarded
+        COUNT(CASE WHEN is_penalty = TRUE THEN 1 END) AS penalties_awarded
     FROM {{ ref('silver_goal_events') }}
 ),
 
 top_scorer AS (
     SELECT
-        player_name,
-        goals_scored,
-        ROW_NUMBER() OVER (ORDER BY goals_scored DESC) AS rn
-    FROM {{ ref('silver_player_stats_history') }}
-    WHERE is_current = TRUE
+        p.player_name,
+        psh.goals_scored,
+        ROW_NUMBER() OVER (ORDER BY psh.goals_scored DESC) AS rn
+    FROM {{ ref('silver_player_stats_history') }} psh
+    JOIN {{ ref('silver_players') }} p ON psh.player_id = p.player_id
+    WHERE psh.is_current = TRUE
 ),
 
 current_round AS (
