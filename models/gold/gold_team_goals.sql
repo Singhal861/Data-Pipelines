@@ -27,6 +27,7 @@ goal_details AS (
         m.stage,
         m.match_date_local,
         m.stadium_id,
+        m.winner_team_id,  -- Use pre-calculated winner from silver_matches
         s.name AS stadium_name,
         tz.city AS stadium_city,
         tz.actual_country,
@@ -38,10 +39,10 @@ goal_details AS (
             WHEN ge.team_id = m.home_team_id THEN m.away_team_name
             ELSE m.home_team_name
         END AS opponent_team_name,
+        -- Use winner_team_id from silver_matches instead of recalculating
         CASE
-            WHEN m.home_score > m.away_score AND ge.team_id = m.home_team_id THEN 'Win'
-            WHEN m.away_score > m.home_score AND ge.team_id = m.away_team_id THEN 'Win'
-            WHEN m.home_score = m.away_score THEN 'Draw'
+            WHEN m.winner_team_id = ge.team_id THEN 'Win'
+            WHEN m.winner_team_id IS NULL THEN 'Draw'
             ELSE 'Loss'
         END AS match_result
     FROM {{ ref('silver_goal_events') }} ge

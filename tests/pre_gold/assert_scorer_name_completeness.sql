@@ -1,7 +1,7 @@
 -- Pre-Gold Test: Scorer name completeness in goal_events
 -- Fails if: Any finished match has goals with NULL or blank scorer_name
 -- Purpose: Ensures gold layer can properly attribute goals to players
--- Critical for: gold_match_schedule, gold_team_summary (match-level top scorers)
+-- Critical for: gold_fact_match_schedule, gold_fact_team_performance (match-level top scorers)
 
 SELECT 
     ge.match_id,

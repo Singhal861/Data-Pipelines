@@ -1,5 +1,5 @@
 -- Requirement 4: Team Performance Details (on flag click)
--- Validates: gold_team_summary, gold_team_goals
+-- Validates: gold_fact_team_performance (unified table), gold_team_goals
 
 -- Test that teams have:
 -- 1. Complete stats (wins, losses, points)

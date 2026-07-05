@@ -1,5 +1,5 @@
 -- Requirement 1: Tournament Bracket / Fixture Graphics
--- Validates: gold_tournament_bracket, gold_match_schedule, gold_team_summary
+-- Validates: gold_fact_match_schedule (knockout matches), gold_fact_team_performance
 
 -- Test that all knockout matches have complete bracket structure with:
 -- 1. Team logos and names populated
@@ -15,8 +15,9 @@ WITH validation_failures AS (
         CONCAT('Match ', match_id, ' missing logos - home: ', 
                CASE WHEN home_team_logo IS NULL THEN 'NULL' ELSE 'OK' END,
                ', away: ', CASE WHEN away_team_logo IS NULL THEN 'NULL' ELSE 'OK' END) AS failure_detail
-    FROM {{ ref('gold_tournament_bracket') }}
-    WHERE (home_team_logo IS NULL OR away_team_logo IS NULL)
+    FROM {{ ref('gold_fact_match_schedule') }}
+    WHERE is_knockout = TRUE  -- Only check knockout matches
+      AND (home_team_logo IS NULL OR away_team_logo IS NULL)
       AND home_team_name IS NOT NULL  -- Only check matches with assigned teams
     
     UNION ALL
@@ -26,8 +27,9 @@ WITH validation_failures AS (
         'Invalid match datetime' AS failure_type,
         match_id,
         CONCAT('Match ', match_id, ' has NULL match_datetime_utc') AS failure_detail
-    FROM {{ ref('gold_tournament_bracket') }}
-    WHERE match_datetime_utc IS NULL
+    FROM {{ ref('gold_fact_match_schedule') }}
+    WHERE is_knockout = TRUE  -- Only check knockout matches
+      AND match_datetime_utc IS NULL
       AND home_team_name IS NOT NULL  -- Only check matches with assigned teams
     
     UNION ALL
@@ -38,8 +40,9 @@ WITH validation_failures AS (
         match_id,
         CONCAT('Match ', match_id, ' missing - stadium: ', 
                COALESCE(stadium_name, 'NULL'), ', country: ', COALESCE(actual_country, 'NULL')) AS failure_detail
-    FROM {{ ref('gold_tournament_bracket') }}
-    WHERE (stadium_name IS NULL OR actual_country IS NULL)
+    FROM {{ ref('gold_fact_match_schedule') }}
+    WHERE is_knockout = TRUE  -- Only check knockout matches
+      AND (stadium_name IS NULL OR actual_country IS NULL)
       AND home_team_name IS NOT NULL  -- Only check matches with assigned teams
     
     UNION ALL
@@ -49,8 +52,9 @@ WITH validation_failures AS (
         'Missing winner for completed match' AS failure_type,
         match_id,
         CONCAT('Match ', match_id, ' is finished (score: ', home_score, '-', away_score, ') but winner_team_id is NULL - check penalty shootout data') AS failure_detail
-    FROM {{ ref('gold_tournament_bracket') }}
-    WHERE is_finished = TRUE 
+    FROM {{ ref('gold_fact_match_schedule') }}
+    WHERE is_knockout = TRUE  -- Only check knockout matches
+      AND is_finished = TRUE 
       AND winner_team_id IS NULL
       AND home_team_name IS NOT NULL  -- Only check matches with assigned teams
     

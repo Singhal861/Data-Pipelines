@@ -8,7 +8,7 @@ tests:
   - name: test_req1_tournament_bracket_completeness
     description: |
       Requirement 1: Tournament Bracket / Fixture Graphics
-      Validates: gold_tournament_bracket, gold_match_schedule, gold_team_summary
+      Validates: gold_fact_match_schedule (knockout matches), gold_team_summary
       Checks: team logos, match times (UTC), stadium info, winner tracking
     config:
       tags: ['gold', 'requirement_1', 'tournament_bracket']
@@ -26,7 +26,7 @@ tests:
   - name: test_req3_match_schedule_completeness
     description: |
       Requirement 3: Live Knockout Match Display
-      Validates: gold_match_schedule
+      Validates: gold_fact_match_schedule (all matches)
       Checks: team logos, live indicators, top scorers, UTC/local times, stadium info
     config:
       tags: ['gold', 'requirement_3', 'match_schedule']

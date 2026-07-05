@@ -1,5 +1,5 @@
 -- Requirement 5: Group Stage Points Table
--- Validates: gold_points_table
+-- Validates: gold_fact_team_performance (unified table)
 
 -- Test that points table has:
 -- 1. All teams with group assignments
