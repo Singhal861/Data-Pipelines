@@ -4,8 +4,9 @@
 )}}
 
 -- gold_golden_boot_race: Match-by-match Golden Boot race progression (Requirement #6)
--- Uses player_stats_history snapshots to track cumulative goals over time
--- Dynamic top 3 with FIFA tiebreaker rules and tie handling (1,1,2 or 1,2,2 or 1,2,3,3)
+-- FIX: For each match, use the LATEST snapshot available for each player up to that match
+-- This ensures eliminated players' stats freeze but remain in rankings
+-- Uses clean silver_player_stats_history (no name inconsistencies)
 
 WITH timezone_ref AS (
     SELECT * FROM {{ source('silver', 'ref_stadium_enriched') }}
@@ -30,77 +31,68 @@ matches_with_sequence AS (
     WHERE m.is_finished = TRUE
 ),
 
--- Get all player stats snapshots with match sequence
-player_stats_timeline AS (
+-- For EACH match, get the LATEST snapshot available for EACH player up to that match
+-- Key insight: Eliminated players' last snapshot carries forward through all future matches
+player_stats_at_each_match AS (
     SELECT
+        mws.match_sequence,
         ps.player_id,
-        p.player_name,
-        p.player_logo,  -- ✅ Player image URL
-        p.team_id,
         ps.goals_scored,
         ps.assists,
         ps.minutes_played,
         ps.valid_from,
-        -- Find the match sequence that corresponds to this snapshot
-        (
-            SELECT MAX(match_sequence) 
-            FROM matches_with_sequence mws
-            WHERE mws.match_datetime_utc <= ps.valid_from
-        ) AS match_sequence
-    FROM {{ ref('silver_player_stats_history') }} ps
-    JOIN {{ ref('silver_players') }} p ON ps.player_id = p.player_id
-    WHERE ps.goals_scored > 0
-),
-
--- Get latest stats per player per match sequence
-player_stats_per_match AS (
-    SELECT
-        player_id,
-        player_name,
-        player_logo,  -- ✅ Player image URL
-        team_id,
-        match_sequence,
-        goals_scored,
-        assists,
-        minutes_played,
         ROW_NUMBER() OVER (
-            PARTITION BY player_id, match_sequence 
-            ORDER BY valid_from DESC
+            PARTITION BY mws.match_sequence, ps.player_id
+            ORDER BY ps.valid_from DESC
         ) AS rn
-    FROM player_stats_timeline
-    WHERE match_sequence IS NOT NULL
+    FROM matches_with_sequence mws
+    CROSS JOIN {{ ref('silver_player_stats_history') }} ps
+    WHERE ps.valid_from <= mws.match_datetime_utc  -- Only snapshots before or at this match
+        AND ps.goals_scored > 0  -- Only players who have scored
 ),
 
--- Deduplicate to one record per player per match
-deduplicated_stats AS (
+-- Keep only the latest snapshot per player per match
+latest_snapshot_per_match AS (
     SELECT
-        player_id,
-        player_name,
-        player_logo,  -- ✅ FIX: Added player_logo here
-        team_id,
         match_sequence,
-        goals_scored,
-        assists,
-        minutes_played
-    FROM player_stats_per_match
-    WHERE rn = 1
+        player_id,
+        goals_scored AS goals_cumulative,
+        assists AS assists_cumulative,
+        minutes_played AS minutes_cumulative
+    FROM player_stats_at_each_match
+    WHERE rn = 1  -- Latest snapshot for this player at this match
 ),
 
--- Rank players at each match sequence with FIFA Golden Boot tiebreaker rules
+-- Join with player metadata for names, logos, team info
+player_stats_enriched AS (
+    SELECT
+        lspm.match_sequence,
+        lspm.player_id,
+        p.player_name,
+        p.player_logo,
+        p.team_id,
+        lspm.goals_cumulative,
+        lspm.assists_cumulative,
+        lspm.minutes_cumulative
+    FROM latest_snapshot_per_match lspm
+    LEFT JOIN {{ ref('silver_players') }} p ON lspm.player_id = p.player_id
+),
+
+-- Rank players at each match sequence with FIFA Golden Boot tiebreaker
 with_ranking AS (
     SELECT
-        ds.*,
+        pse.*,
         DENSE_RANK() OVER (
-            PARTITION BY ds.match_sequence
+            PARTITION BY pse.match_sequence
             ORDER BY 
-                ds.goals_scored DESC,      -- Primary: Most goals
-                ds.assists DESC,           -- Tiebreaker 1: Most assists
-                ds.minutes_played ASC      -- Tiebreaker 2: Fewer minutes
+                pse.goals_cumulative DESC,      -- Primary: Most goals
+                pse.assists_cumulative DESC,    -- Tiebreaker 1: Most assists
+                pse.minutes_cumulative ASC      -- Tiebreaker 2: Fewer minutes
         ) AS rank_at_match
-    FROM deduplicated_stats ds
+    FROM player_stats_enriched pse
 ),
 
--- Filter to top 3 ranks (handles ties: 1,1,2 or 1,2,2 or 1,2,3,3)
+-- Filter to top 3 ranks at each match
 top_3_at_each_match AS (
     SELECT
         wr.*,
@@ -115,13 +107,13 @@ SELECT
     match_sequence,
     player_id,
     player_name,
-    player_logo,  -- ✅ Player image URL
+    player_logo,
     team_id,
     team_name,
     team_logo,
-    goals_scored AS goals_cumulative,
-    assists AS assists_cumulative,
-    minutes_played AS minutes_cumulative,
+    goals_cumulative,
+    assists_cumulative,
+    minutes_cumulative,
     rank_at_match,
     CASE 
         WHEN rank_at_match = 1 THEN '🥇'
