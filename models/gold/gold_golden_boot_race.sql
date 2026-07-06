@@ -4,8 +4,7 @@
 )}}
 
 -- gold_golden_boot_race: Match-by-match Golden Boot race progression (Requirement #6)
--- FIX: For each match, use the LATEST snapshot available for each player up to that match
--- This ensures eliminated players' stats freeze but remain in rankings
+-- Shows FULL history of whoever is CURRENTLY in top 3 (for line graph visualization)
 -- Uses clean silver_player_stats_history (no name inconsistencies)
 
 WITH timezone_ref AS (
@@ -31,27 +30,70 @@ matches_with_sequence AS (
     WHERE m.is_finished = TRUE
 ),
 
--- For EACH match, get the LATEST snapshot available for EACH player up to that match
--- Key insight: Eliminated players' last snapshot carries forward through all future matches
-player_stats_at_each_match AS (
+-- Get the latest match sequence
+latest_match AS (
+    SELECT MAX(match_sequence) AS max_sequence
+    FROM matches_with_sequence
+),
+
+-- For each player, get their latest snapshot (as of latest match)
+player_latest_stats AS (
+    SELECT
+        ps.player_id,
+        ps.goals_scored,
+        ps.assists,
+        ps.minutes_played,
+        ROW_NUMBER() OVER (
+            PARTITION BY ps.player_id
+            ORDER BY ps.valid_from DESC
+        ) AS rn
+    FROM {{ ref('silver_player_stats_history') }} ps
+    CROSS JOIN latest_match lm
+    CROSS JOIN matches_with_sequence mws
+    WHERE mws.match_sequence = lm.max_sequence
+        AND ps.valid_from <= mws.match_datetime_utc
+        AND ps.goals_scored > 0
+),
+
+-- Identify CURRENT top 3 players (at latest match)
+current_top_3_players AS (
+    SELECT
+        player_id,
+        goals_scored,
+        assists,
+        minutes_played,
+        DENSE_RANK() OVER (
+            ORDER BY 
+                goals_scored DESC,
+                assists DESC,
+                minutes_played ASC
+        ) AS rank_current
+    FROM player_latest_stats
+    WHERE rn = 1
+    QUALIFY rank_current <= 3  -- Only keep top 3
+),
+
+-- For these top 3 players, get their stats at EVERY match sequence
+top_3_full_history AS (
     SELECT
         mws.match_sequence,
-        ps.player_id,
+        ct3.player_id,
         ps.goals_scored,
         ps.assists,
         ps.minutes_played,
         ps.valid_from,
         ROW_NUMBER() OVER (
-            PARTITION BY mws.match_sequence, ps.player_id
+            PARTITION BY mws.match_sequence, ct3.player_id
             ORDER BY ps.valid_from DESC
         ) AS rn
     FROM matches_with_sequence mws
-    CROSS JOIN {{ ref('silver_player_stats_history') }} ps
-    WHERE ps.valid_from <= mws.match_datetime_utc  -- Only snapshots before or at this match
-        AND ps.goals_scored > 0  -- Only players who have scored
+    CROSS JOIN current_top_3_players ct3
+    INNER JOIN {{ ref('silver_player_stats_history') }} ps 
+        ON ps.player_id = ct3.player_id
+    WHERE ps.valid_from <= mws.match_datetime_utc
 ),
 
--- Keep only the latest snapshot per player per match
+-- Keep only latest snapshot per player per match
 latest_snapshot_per_match AS (
     SELECT
         match_sequence,
@@ -59,8 +101,8 @@ latest_snapshot_per_match AS (
         goals_scored AS goals_cumulative,
         assists AS assists_cumulative,
         minutes_played AS minutes_cumulative
-    FROM player_stats_at_each_match
-    WHERE rn = 1  -- Latest snapshot for this player at this match
+    FROM top_3_full_history
+    WHERE rn = 1
 ),
 
 -- Join with player metadata for names, logos, team info
@@ -78,7 +120,7 @@ player_stats_enriched AS (
     LEFT JOIN {{ ref('silver_players') }} p ON lspm.player_id = p.player_id
 ),
 
--- Rank players at each match sequence with FIFA Golden Boot tiebreaker
+-- Rank these 3 players at each match (among themselves)
 with_ranking AS (
     SELECT
         pse.*,
@@ -92,15 +134,22 @@ with_ranking AS (
     FROM player_stats_enriched pse
 ),
 
--- Filter to top 3 ranks at each match
-top_3_at_each_match AS (
+-- Add team info
+enriched AS (
     SELECT
-        wr.*,
+        wr.match_sequence,
+        wr.player_id,
+        wr.player_name,
+        wr.player_logo,
+        wr.team_id,
         t.team_name,
-        t.team_logo
+        t.team_logo,
+        wr.goals_cumulative,
+        wr.assists_cumulative,
+        wr.minutes_cumulative,
+        wr.rank_at_match
     FROM with_ranking wr
     LEFT JOIN {{ ref('silver_teams') }} t ON wr.team_id = t.team_id
-    WHERE wr.rank_at_match <= 3
 )
 
 SELECT
@@ -126,5 +175,5 @@ SELECT
         ELSE FALSE 
     END AS is_current_top_3,
     CURRENT_TIMESTAMP() AS last_updated
-FROM top_3_at_each_match
+FROM enriched
 ORDER BY match_sequence, rank_at_match, player_name
