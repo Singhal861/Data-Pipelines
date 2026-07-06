@@ -114,15 +114,15 @@ with_team_logos AS (
 match_scorers AS (
     SELECT
         ge.match_id,
-        ge.team_id,
+        ge.team_name,
         ge.scorer_name,
         COUNT(*) AS goals_in_match,
         ROW_NUMBER() OVER (
-            PARTITION BY ge.match_id, ge.team_id 
+            PARTITION BY ge.match_id, ge.team_name 
             ORDER BY COUNT(*) DESC, MAX(ge.minute) DESC
         ) AS scorer_rank
     FROM {{ ref('silver_goal_events') }} ge
-    GROUP BY ge.match_id, ge.team_id, ge.scorer_name
+    GROUP BY ge.match_id, ge.team_name, ge.scorer_name
 ),
 
 -- Combine everything
@@ -136,11 +136,11 @@ final AS (
     FROM with_team_logos wtl
     LEFT JOIN match_scorers home_scorer 
         ON wtl.match_id = home_scorer.match_id 
-        AND wtl.home_team_id = home_scorer.team_id 
+        AND wtl.home_team_name = home_scorer.team_name 
         AND home_scorer.scorer_rank = 1
     LEFT JOIN match_scorers away_scorer 
         ON wtl.match_id = away_scorer.match_id 
-        AND wtl.away_team_id = away_scorer.team_id 
+        AND wtl.away_team_name = away_scorer.team_name 
         AND away_scorer.scorer_rank = 1
 )
 

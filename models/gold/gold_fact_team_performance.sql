@@ -64,7 +64,7 @@ group_stage_stats AS (
         gs.goal_difference AS group_goal_difference,
         gs.points AS group_points
     FROM {{ ref('silver_group_standings') }} gs
-    JOIN {{ ref('silver_teams') }} t ON gs.team_id = t.team_id
+    JOIN {{ ref('silver_teams') }} t ON gs.team_name = t.team_name
 ),
 
 current_stage AS (
@@ -96,11 +96,11 @@ top_scorers AS (
     SELECT
         t.team_name,
         p.player_name AS top_scorer_name,
-        COUNT(ge.goal_id) AS top_scorer_goals,
-        ROW_NUMBER() OVER (PARTITION BY t.team_name ORDER BY COUNT(ge.goal_id) DESC) AS scorer_rank
+        COUNT(ge.goal_event_id) AS top_scorer_goals,
+        ROW_NUMBER() OVER (PARTITION BY t.team_name ORDER BY COUNT(ge.goal_event_id) DESC) AS scorer_rank
     FROM {{ ref('silver_goal_events') }} ge
     JOIN {{ ref('silver_players') }} p ON ge.scorer_name = p.player_name
-    JOIN {{ ref('silver_teams') }} t ON p.team_id = t.team_id
+    JOIN {{ ref('silver_teams') }} t ON p.team_name = t.team_name
     GROUP BY t.team_name, p.player_name
 ),
 
@@ -113,7 +113,7 @@ top_assisters AS (
         ROW_NUMBER() OVER (PARTITION BY t.team_name ORDER BY psh.assists DESC) AS assist_rank
     FROM {{ ref('silver_player_stats_history') }} psh
     JOIN {{ ref('silver_players') }} p ON psh.player_id = p.player_id
-    JOIN {{ ref('silver_teams') }} t ON p.team_id = t.team_id
+    JOIN {{ ref('silver_teams') }} t ON p.team_name = t.team_name
     WHERE psh.is_current = TRUE
 ),
 
