@@ -30,3 +30,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.env
+.env.*
+.venv/
+__pycache__/
+*.pyc
+scripts/test_common.py
+scripts/test_connection.py
