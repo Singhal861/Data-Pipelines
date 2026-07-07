@@ -1,0 +1,981 @@
+================================================================================
+FIFA WORLD CUP 2026 - GOLD LAYER REQUIREMENTS & SQL MAPPING
+================================================================================
+
+This document maps each dashboard requirement to its gold layer table(s) and 
+provides the complete SQL definition for each model.
+
+Total Requirements: 7
+Total Gold Tables: 6 (unified fact table architecture)
+
+================================================================================
+REQUIREMENT 1: TOURNAMENT BRACKET / FIXTURE GRAPHICS
+================================================================================
+
+Description:
+  Display complete knockout bracket with dynamic TBD opponent logic:
+  - Bracket structure: Team A vs Team B → Winner advances
+                      Team C vs Team D → Winner advances
+                      Now Winner(A,B) vs Winner(C,D) → Champion
+  - Team flags/logos displayed with team names below
+  - Click flag → Show scorers in THAT match with goal timing (23', 45+3, 90+3, 108')
+  - Match times in UTC
+  - Stadium name, city, country
+  - TBD logic: Shows "Winner of QF1" or "TBD" for unconfirmed matchups
+  - Match status: Finished/Live/Upcoming (if not finished, goals show "NA")
+
+Gold Tables:
+  1. gold_fact_match_schedule (unified match fact table)
+  2. gold_team_goals (goal-by-goal details)
+
+Key Features:
+  ✅ Complete bracket structure with all knockout rounds
+  ✅ TBD opponent logic ("Winner of Match X" or "TBD")
+  ✅ Team logos (home & away) with team names
+  ✅ Click flag → Show match-specific goal details with timing
+  ✅ Goal timing format: "23'", "45+3'", "90+3'", "108'" (extra time)
+  ✅ Penalty indicators: "(PEN)" suffix
+  ✅ Match times in UTC
+  ✅ Stadium information (name, city, country)
+  ✅ Match status handling (Finished/Live/Upcoming)
+  ✅ "NA" display for goals when match not completed
+
+Dashboard SQL Query (Single Comprehensive Query):
+
+-- Complete tournament bracket with goal details and TBD logic
+WITH match_bracket AS (
+    -- Get all knockout matches with bracket structure
+    SELECT 
+        match_id,
+        stage,
+        bracket_position,
+        feeds_into_position,
+        bracket_half,
+        
+        -- Home team (handles TBD logic)
+        home_team_name,
+        COALESCE(home_display_name, home_team_name, 'TBD') AS home_display_name,
+        home_team_logo,
+        home_score,
+        
+        -- Away team (handles TBD logic)
+        away_team_name,
+        COALESCE(away_display_name, away_team_name, 'TBD') AS away_display_name,
+        away_team_logo,
+        away_score,
+        
+        -- Match outcome
+        winner_team_name,
+        winner_team_logo,
+        
+        -- Match metadata
+        match_status,
+        match_datetime_utc,
+        match_date_local,
+        stadium_name,
+        stadium_city,
+        actual_country,
+        is_finished,
+        is_live
+        
+    FROM singhal.fifa_worldcup_gold.gold_fact_match_schedule
+    WHERE is_knockout = TRUE
+),
+
+home_goals AS (
+    -- Get goals scored by home team in each match
+    SELECT
+        g.match_id,
+        COLLECT_LIST(
+            STRUCT(
+                g.scorer_name,
+                g.minute,
+                g.is_penalty,
+                g.goal_number_in_match
+            )
+        ) AS goals
+    FROM singhal.fifa_worldcup_gold.gold_team_goals g
+    INNER JOIN match_bracket mb ON g.match_id = mb.match_id AND g.team_name = mb.home_team_name
+    GROUP BY g.match_id
+),
+
+away_goals AS (
+    -- Get goals scored by away team in each match
+    SELECT
+        g.match_id,
+        COLLECT_LIST(
+            STRUCT(
+                g.scorer_name,
+                g.minute,
+                g.is_penalty,
+                g.goal_number_in_match
+            )
+        ) AS goals
+    FROM singhal.fifa_worldcup_gold.gold_team_goals g
+    INNER JOIN match_bracket mb ON g.match_id = mb.match_id AND g.team_name = mb.away_team_name
+    GROUP BY g.match_id
+)
+
+-- Final comprehensive query
+SELECT
+    -- Bracket structure
+    mb.match_id,
+    mb.stage,
+    mb.bracket_position,              -- e.g., "QF1", "SF1", "FIN"
+    mb.feeds_into_position,           -- e.g., QF1 → SF1
+    mb.bracket_half,                  -- "Top" or "Bottom"
+    
+    -- Home team
+    mb.home_team_name,
+    mb.home_display_name,             -- Shows "Winner of QF1" or "TBD" for unfilled
+    mb.home_team_logo,                -- 🇦🇷 Team flag
+    mb.home_score,
+    
+    -- Home team goals (formatted with timing)
+    CASE 
+        WHEN mb.is_finished = TRUE AND hg.goals IS NOT NULL
+        THEN TRANSFORM(
+            hg.goals,
+            g -> CONCAT(
+                g.scorer_name, ' (', g.minute, ')',
+                CASE WHEN g.is_penalty THEN ' (PEN)' ELSE '' END
+            )
+        )
+        ELSE ARRAY('NA')  -- Match not completed yet
+    END AS home_goals_detail,
+    
+    -- Away team
+    mb.away_team_name,
+    mb.away_display_name,             -- Shows "Winner of QF3" or "TBD" for unfilled
+    mb.away_team_logo,                -- 🇫🇷 Team flag
+    mb.away_score,
+    
+    -- Away team goals (formatted with timing)
+    CASE 
+        WHEN mb.is_finished = TRUE AND ag.goals IS NOT NULL
+        THEN TRANSFORM(
+            ag.goals,
+            g -> CONCAT(
+                g.scorer_name, ' (', g.minute, ')',
+                CASE WHEN g.is_penalty THEN ' (PEN)' ELSE '' END
+            )
+        )
+        ELSE ARRAY('NA')  -- Match not completed yet
+    END AS away_goals_detail,
+    
+    -- Match outcome
+    mb.winner_team_name,
+    mb.winner_team_logo,
+    
+    -- Match info
+    mb.match_status,                  -- 'Finished', 'Live', 'Upcoming'
+    mb.match_datetime_utc,            -- UTC time
+    mb.match_date_local,              -- Local timezone display
+    mb.stadium_name,                  -- MetLife Stadium
+    mb.stadium_city,                  -- New Jersey
+    mb.actual_country,                -- United States
+    mb.is_finished,
+    mb.is_live
+
+FROM match_bracket mb
+LEFT JOIN home_goals hg ON mb.match_id = hg.match_id
+LEFT JOIN away_goals ag ON mb.match_id = ag.match_id
+
+ORDER BY 
+    CASE mb.stage
+        WHEN 'Round of 32' THEN 1
+        WHEN 'Round of 16' THEN 2
+        WHEN 'Quarter Final' THEN 3
+        WHEN 'Semi Final' THEN 4
+        WHEN 'Third Place' THEN 5
+        WHEN 'Final' THEN 6
+    END,
+    mb.bracket_position;
+
+Visual Representation:
+  
+  Bracket Structure Example:
+  
+    QF1: Team A 🇦🇷 vs Team B 🇧🇷  ├
+                                      ├─── SF1: Winner A 🇦🇷 vs _____ (Winner of QF3/QF4)
+    QF2: Team C 🇫🇷 vs Team D 🇩🇪  ├
+    
+  When User Clicks Flag (e.g., 🇦🇷 Argentina):
+    → Dashboard shows:
+      ├─ Match: Argentina vs Brazil (Quarter Final 1)
+      ├─ Stadium: MetLife Stadium, New Jersey, United States
+      ├─ Time: 2026-07-09 19:00:00 UTC
+      ├─ Score: Argentina 2 - 1 Brazil
+      └─ Goals:
+         ├─ 🇦🇷 Messi (23')
+         ├─ 🇧🇷 Neymar (45+3')
+         └─ 🇦🇷 Di Maria (67')
+
+TBD Logic Examples:
+  1. Upcoming match (teams not determined):
+     home_display_name: "Winner of QF1"
+     away_display_name: "Winner of QF3"
+     home_goals_detail: ['NA']
+     away_goals_detail: ['NA']
+  
+  2. One team determined, one pending:
+     home_display_name: "Argentina"
+     away_display_name: "Winner of QF3"
+     home_goals_detail: ['NA']  (match not played yet)
+  
+  3. Both teams determined, match finished:
+     home_display_name: "Argentina"
+     away_display_name: "France"
+     home_goals_detail: ['Messi (23')', 'Di Maria (36')', 'Messi (108')']
+     away_goals_detail: ['Mbappé (80') (PEN)', 'Mbappé (81')', 'Mbappé (118') (PEN)']
+
+Query Output Columns:
+  - match_id: Unique match identifier
+  - stage: Tournament round name
+  - bracket_position: Position in bracket (QF1, SF1, FIN)
+  - feeds_into_position: Next match this feeds into
+  - bracket_half: Visual positioning (Top/Bottom)
+  - home_team_name: Actual team name (NULL if TBD)
+  - home_display_name: Display name with TBD logic
+  - home_team_logo: Team flag URL
+  - home_score: Goals scored
+  - home_goals_detail: Array of formatted goal strings
+  - away_team_name: Actual team name (NULL if TBD)
+  - away_display_name: Display name with TBD logic
+  - away_team_logo: Team flag URL
+  - away_score: Goals scored
+  - away_goals_detail: Array of formatted goal strings
+  - winner_team_name: Winner (NULL if not finished)
+  - winner_team_logo: Winner flag
+  - match_status: Finished/Live/Upcoming
+  - match_datetime_utc: Match time in UTC
+  - match_date_local: Match time in local timezone
+  - stadium_name: Venue name
+  - stadium_city: City
+  - actual_country: Country
+  - is_finished: Boolean
+  - is_live: Boolean
+
+================================================================================
+REQUIREMENT 2: TOP 10 SCORERS WITH PLAYER DETAILS & SPIDER CHART
+================================================================================
+
+Description:
+  Display top 10 goal scorers with comprehensive statistics:
+  - Goal count, assists, rating (out of 10)
+  - Matches played, minutes played
+  - Click player → Spider chart with percentiles
+  - Rating + team logo below chart
+  - Highest # of goals against specific team
+
+Gold Table:
+  1. gold_player_leaderboard
+
+Key Features:
+  ✅ Top 10 players ranked by goals
+  ✅ Player images (player_logo field)
+  ✅ Team logos
+  ✅ Spider chart percentiles (goals, assists, minutes, matches)
+  ✅ Core stats: goals_scored, assists, rating_0_to_10, matches_played, minutes_played
+  ✅ Most goals against specific team data
+  ✅ Golden Boot ranking with FIFA tiebreaker rules
+
+Dashboard SQL Query:
+
+-- Query 2: Get top 10 scorers with all stats for spider chart
+SELECT 
+    rank,
+    player_id,
+    player_name,
+    player_logo,
+    team_id,
+    team_name,
+    team_logo,
+    goals_scored,
+    assists,
+    matches_played,
+    minutes_played,
+    rating_0_to_10,
+    goals_percentile,      -- For spider chart
+    assists_percentile,    -- For spider chart
+    minutes_percentile,    -- For spider chart
+    matches_percentile,    -- For spider chart
+    most_goals_against_team_name,
+    most_goals_against_team_count,
+    golden_boot_rank,
+    is_top_3,
+    goals_behind_leader
+FROM singhal.fifa_worldcup_gold.gold_player_leaderboard
+ORDER BY rank
+LIMIT 10;
+
+================================================================================
+REQUIREMENT 3: LIVE & UPCOMING MATCHES DISPLAY
+================================================================================
+
+Description:
+  Show all live and upcoming matches (group stage + knockout) with confirmed teams:
+  - Team A vs Team B with team logos
+  - Top scorer per team
+  - Match time in UTC (and convert to local)
+  - Stadium name, city, country
+  - Live match indicator
+  - Countdown to kickoff for upcoming matches
+  - Excludes TBD/unconfirmed matchups (Winner of X)
+
+Gold Table:
+  1. gold_fact_match_schedule
+
+Key Features:
+  ✅ Team logos (home & away)
+  ✅ Live match indicators (is_live flag)
+  ✅ Top scorers per team
+  ✅ Match times (UTC & local)
+  ✅ Stadium information
+  ✅ Match status (Live, Upcoming)
+  ✅ Time elapsed display (for live)
+  ✅ Countdown display (for upcoming)
+  ✅ Includes both group stage AND knockout matches
+  ✅ Excludes matches where teams are TBD or "Winner of X"
+
+Dashboard SQL Query:
+
+-- Query 3: Get all live and upcoming matches with confirmed teams
+SELECT 
+    match_id,
+    match_status,  -- 'Live' or 'Upcoming'
+    match_datetime_utc,
+    match_date_local,
+    home_team_id,
+    home_team_name,
+    home_team_logo,
+    home_top_scorer_name,
+    home_top_scorer_goals,
+    home_score,
+    away_team_id,
+    away_team_name,
+    away_team_logo,
+    away_top_scorer_name,
+    away_top_scorer_goals,
+    away_score,
+    stage,
+    group_name,  -- NULL for knockout matches
+    is_knockout,
+    stadium_name,
+    stadium_city,
+    actual_country,
+    is_live,
+    minutes_elapsed,  -- For live matches
+    hours_until_kickoff  -- For upcoming matches
+FROM singhal.fifa_worldcup_gold.gold_fact_match_schedule
+WHERE match_status IN ('Live', 'Upcoming')
+  AND is_finished = FALSE
+  AND home_team_name IS NOT NULL  -- Exclude TBD matches
+  AND away_team_name IS NOT NULL  -- Exclude "Winner of X" matches
+ORDER BY match_datetime_utc ASC;
+
+Notes:
+  - This query shows ALL matches (group + knockout) that are live or upcoming
+  - Filters out TBD matches by checking home_team_name and away_team_name are not NULL
+  - For knockout matches, group_name will be NULL
+  - For group matches, bracket columns will be NULL
+
+================================================================================
+REQUIREMENT 4: ALL FINISHED MATCHES TABLE
+================================================================================
+
+Description:
+  Display complete history of all finished matches:
+  - Match ID for reference
+  - Team A name vs Team B name (home vs away)
+  - Winner team name with logo
+  - Final score display (e.g., "2-1")
+  - Penalty shootout indicator (but not scores - not available in data)
+  - Match date & time (UTC and local)
+  - Stadium city where match was played
+  - Stage information (group stage or knockout round)
+
+Gold Table:
+  1. gold_fact_match_schedule
+
+Key Features:
+  ✅ Complete match history (group stage + knockout)
+  ✅ Team logos (home, away, winner)
+  ✅ Score display (regular time)
+  ✅ Penalty shootout indicator (TRUE/FALSE)
+  ✅ Match times (UTC & local)
+  ✅ Stadium city information
+  ✅ Stage/round information
+  ✅ Ordered by most recent first
+
+Dashboard SQL Query:
+
+-- Query 4: Get all finished matches with results and penalty shootout detection
+SELECT 
+    m.match_id,
+    
+    -- Team information
+    m.home_team_name AS team_a_name,
+    m.home_team_logo AS team_a_logo,
+    m.away_team_name AS team_b_name,
+    m.away_team_logo AS team_b_logo,
+    
+    -- Score information
+    m.home_score,
+    m.away_score,
+    
+    -- Winner information
+    m.winner_team_name,
+    m.winner_team_logo,
+    
+    -- Penalty shootout detection
+    -- If knockout match ended in a draw but has a winner, it was decided by penalties
+    CASE 
+        WHEN m.is_knockout = TRUE 
+         AND m.home_score = m.away_score 
+         AND m.winner_team_name IS NOT NULL 
+        THEN TRUE 
+        ELSE FALSE 
+    END AS is_penalty_shootout,
+    
+    -- Match timing
+    m.match_datetime_utc,
+    m.match_date_local,
+    
+    -- Location
+    m.stadium_city,
+    m.stadium_name,
+    m.actual_country,
+    
+    -- Tournament context
+    m.stage,
+    m.group_name,  -- NULL for knockout matches
+    m.is_knockout
+    
+FROM singhal.fifa_worldcup_gold.gold_fact_match_schedule m
+WHERE m.is_finished = TRUE
+ORDER BY m.match_datetime_utc DESC;
+
+Notes:
+  - Shows ALL completed matches (both group stage and knockout)
+  - Ordered by most recent first
+  - Penalty shootout detection logic:
+    * Knockout match (is_knockout = TRUE)
+    * Match score is tied (home_score = away_score)
+    * Has a winner (winner_team_name IS NOT NULL)
+    * This indicates the match was decided by penalty shootout
+  - Penalty shootout SCORES are not available in the data
+  - Dashboard will format display as:
+    * Regular wins: "Argentina 2-1 Brazil"
+    * Penalty wins: "Argentina 3-3 France (penalties)" - without showing penalty score
+  - group_name is NULL for knockout matches
+
+Example Output Columns:
+  match_id: 64
+  team_a_name: Argentina
+  team_b_name: France
+  home_score: 3
+  away_score: 3
+  winner_team_name: Argentina
+  is_penalty_shootout: TRUE
+  match_datetime_utc: 2026-07-18 19:00:00
+  stadium_city: New Jersey
+  stage: Final
+
+================================================================================
+REQUIREMENT 5: TOURNAMENT POINTS TABLE & TEAM PERFORMANCE
+================================================================================
+
+Description:
+  Display tournament-wide points table with team performance:
+  - Main table shows ALL teams with aggregate stats (logo, points, wins, losses, draws, 
+    goals for/against, clean sheets, qualification status, group/stage)
+  - Click team flag → Shows simple match-by-match list with raw data (dashboard formats display)
+
+Gold Tables:
+  1. gold_fact_team_performance (main table - always visible)
+  2. gold_fact_match_schedule (match summaries - shown on click)
+
+Key Features:
+  ✅ Tournament-wide points table (all teams)
+  ✅ Ordered by total_points DESC
+  ✅ Team logos
+  ✅ Win/Loss/Draw records
+  ✅ Goals For, Goals Against, Goal Difference
+  ✅ Clean Sheets count
+  ✅ Qualification status (Qualified, Disqualified, In Progress)
+  ✅ Group name or current knockout stage
+  ✅ Click interaction: Returns raw match data (NO string concatenation)
+
+Dashboard SQL Queries:
+
+-- Query 5a: Get tournament points table (MAIN VIEW - always visible, all teams)
+SELECT 
+    team_name,
+    team_logo,
+    total_points,
+    total_wins,
+    total_losses,
+    total_draws,
+    goals_for,
+    goals_against,
+    goal_difference,
+    clean_sheets,
+    group_name,  -- e.g., "A", "B", "C" or NULL for knockout stage
+    current_stage,  -- e.g., "Group Stage", "Quarter Final", "Semi Final"
+    qualification_status,  -- 'Qualified', 'Disqualified', 'In Progress'
+    rank_overall  -- Overall tournament ranking
+FROM singhal.fifa_worldcup_gold.gold_fact_team_performance
+ORDER BY total_points DESC, goal_difference DESC, goals_for DESC;
+
+-- Query 5b: Get match-by-match data (shown on flag click ONLY)
+-- IMPORTANT: This is a PARAMETERIZED query. Replace 'Argentina' with the clicked team name.
+-- For dashboard implementation, use a query parameter widget for selected_team_name.
+
+-- Returns RAW columns - dashboard handles formatting
+-- req 5b: All match history (dashboard will filter by clicked team)
+SELECT 
+    m.match_id,
+    m.match_datetime_utc,
+    m.match_date_local,
+    m.stage,
+    
+    -- Home team info
+    m.home_team_name,
+    m.home_team_logo,
+    m.home_score,
+    
+    -- Away team info
+    m.away_team_name,
+    m.away_team_logo,
+    m.away_score,
+    
+    -- Winner info
+    m.winner_team_name,
+    m.winner_team_logo,
+    
+    -- Penalty shootout detection
+    CASE 
+        WHEN m.is_knockout = TRUE 
+         AND m.home_score = m.away_score 
+         AND m.winner_team_name IS NOT NULL 
+        THEN TRUE 
+        ELSE FALSE 
+    END AS is_penalty_shootout,
+    
+    m.stadium_name,
+    m.stadium_city
+    
+FROM singhal.fifa_worldcup_gold.gold_fact_match_schedule m
+WHERE m.is_finished = TRUE
+ORDER BY m.match_datetime_utc ASC;
+
+Query 5b - Testing Examples:
+  -- For Argentina:
+  WHERE (m.home_team_name = 'Argentina' OR m.away_team_name = 'Argentina')
+  
+  -- For Brazil:
+  WHERE (m.home_team_name = 'Brazil' OR m.away_team_name = 'Brazil')
+  
+  -- For France:
+  WHERE (m.home_team_name = 'France' OR m.away_team_name = 'France')
+
+Visual Interaction Flow:
+
+📊 Points Table (MAIN VIEW - Always Visible):
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Rank | Team      | Logo | Pts | W | L | D | GF | GA | GD | CS | Group/Stage │
+├──────┼───────────┼──────┼─────┼───┼───┼───┼────┼────┼────┼────┼─────────────┤
+│  1   | Argentina | 🇦🇷  | 19  | 6 | 0 | 1 | 15 | 5  | +10| 3  | Qualified   │
+│  2   | France    | 🇫🇷  | 16  | 5 | 1 | 1 | 14 | 7  | +7 | 2  | Qualified   │
+│  3   | Brazil    | 🇧🇷  | 15  | 5 | 2 | 0 | 13 | 8  | +5 | 4  | Qualified   │
+│  4   | Germany   | 🇩🇪  | 13  | 4 | 1 | 1 | 11 | 6  | +5 | 3  | Qualified   │
+│  ... | ...       | ...  | ... |...|...|...| .. | .. | .. | .. | ...         │
+└──────┴───────────┴──────┴─────┴───┴───┴───┴────┴────┴────┴────┴─────────────┘
+
+Legend:
+  Pts = Points | W = Wins | L = Losses | D = Draws
+  GF = Goals For | GA = Goals Against | GD = Goal Difference | CS = Clean Sheets
+
+User clicks: 🇦🇷 Argentina flag
+        ↓
+Query 5b returns RAW data:
+
+Row 1: opponent=Mexico, result=Win, team_score=3, opponent_score=0, is_penalty=FALSE
+Row 2: opponent=Poland, result=Win, team_score=2, opponent_score=0, is_penalty=FALSE
+Row 3: opponent=Croatia, result=Win, team_score=3, opponent_score=0, is_penalty=FALSE
+Row 4: opponent=Netherlands, result=Draw, team_score=2, opponent_score=2, is_penalty=FALSE
+Row 5: opponent=France, result=Win, team_score=3, opponent_score=3, is_penalty=TRUE
+
+Dashboard formats as:
+┌──────────────────────────────────────────────────────────┐
+│ 🇦🇷 ARGENTINA - MATCH HISTORY                           │
+├──────────────────────────────────────────────────────────┤
+│ AR vs Mexico: Won 3-0                                    │
+│ AR vs Poland: Won 2-0                                    │
+│ AR vs Croatia: Won 3-0                                   │
+│ AR vs Netherlands: Draw 2-2                              │
+│ AR vs France: Won 3-3 (penalties)                        │
+└──────────────────────────────────────────────────────────┘
+
+Query 5b Output Columns:
+  - match_id: Unique identifier
+  - match_datetime_utc: Match time
+  - stage: Round name
+  - opponent_team_name: Opponent name
+  - match_result: "Win", "Loss", or "Draw"
+  - team_score: Goals scored by selected team
+  - opponent_score: Goals scored by opponent
+  - is_penalty_shootout: TRUE/FALSE
+  - stadium_name, stadium_city: Location
+
+Dashboard Logic:
+  - Format regular: "{match_result} {team_score}-{opponent_score}"
+  - Format penalty: "{match_result} {team_score}-{opponent_score} (penalties)"
+
+Validation Rules:
+  - total_points = (total_wins × 3) + total_draws
+  - goal_difference = goals_for - goals_against
+  - matches_played = total_wins + total_losses + total_draws
+
+================================================================================
+REQUIREMENT 6: GOLDEN BOOT RACE PROGRESSION (LINE GRAPH)
+================================================================================
+
+Description:
+  Show match-by-match progression of top 3 goal scorers:
+  - Dynamic top 3 (can handle ties: 1,1,2 or 1,2,2 or 1,2,3,3)
+  - Player images for each top 3 player
+  - Cumulative goals tracking over time
+  - Medals for current top 3 (🥇🥈🥉)
+  - FIFA Golden Boot tiebreaker rules (assists → minutes)
+
+Gold Table:
+  1. gold_golden_boot_race
+
+Key Features:
+  ✅ Match-by-match progression (match_sequence)
+  ✅ Player images (player_logo field)
+  ✅ Team logos
+  ✅ Top 3 rankings at each match
+  ✅ Cumulative stats (goals, assists, minutes)
+  ✅ Medals (🥇🥈🥉) based on ranking
+  ✅ Current top 3 flag (is_current_top_3)
+  ✅ FIFA tiebreaker rules:
+     1. Most goals
+     2. Most assists (if tied on goals)
+     3. Fewest minutes (if tied on goals & assists)
+
+Dashboard SQL Query:
+
+-- Query 6: Get Golden Boot race progression (single query for everything)
+-- Use for line graph AND current standings (filter where is_current_top_3 = TRUE)
+SELECT 
+    match_sequence,  -- X-axis: Match number (1, 2, 3...)
+    player_id,
+    player_name,
+    player_logo,  -- Player headshot for legend
+    team_id,
+    team_name,
+    team_logo,
+    goals_cumulative,  -- Y-axis: Cumulative goals
+    assists_cumulative,
+    minutes_cumulative,
+    rank_at_match,  -- 1, 2, or 3
+    medal,  -- 🥇, 🥈, or 🥉
+    is_current_top_3  -- TRUE only for latest match (filter for current standings)
+FROM singhal.fifa_worldcup_gold.gold_golden_boot_race
+WHERE rank_at_match <= 3  -- Only top 3 players
+ORDER BY match_sequence, rank_at_match;
+
+Dashboard Usage:
+  - Line Graph: Use all rows (shows progression over time)
+  - Current Standings/Medals: Filter WHERE is_current_top_3 = TRUE (latest state only)
+
+Query Output Columns:
+  - match_sequence: Tournament match number (1, 2, 3...)
+  - player_id, player_name, player_logo: Player identification
+  - team_id, team_name, team_logo: Team identification
+  - goals_cumulative: Total goals scored up to this match
+  - assists_cumulative: Total assists up to this match
+  - minutes_cumulative: Total minutes played up to this match
+  - rank_at_match: Rank at this specific match (1, 2, or 3)
+  - medal: Medal emoji (🥇, 🥈, or 🥉)
+  - is_current_top_3: TRUE if this is the most recent match (for filtering)
+
+================================================================================
+REQUIREMENT 7: TOURNAMENT SUMMARY / OVERVIEW
+================================================================================
+
+Description:
+  Display high-level tournament overview statistics:
+  - Tournament name and current round
+  - Match completion progress (total, completed, remaining)
+  - Goal statistics (total goals, average per match)
+  - Teams remaining in competition
+  - Current top scorer with goal count
+
+Gold Table:
+  1. gold_tournament_summary
+
+Key Features:
+  ✅ Tournament identification (name)
+  ✅ Match progress tracking (total, completed, remaining)
+  ✅ Goal statistics (total, average per match)
+  ✅ Current tournament round/stage
+  ✅ Teams remaining count
+  ✅ Top scorer information (name, goals)
+
+Dashboard SQL Query:
+
+-- Query 7: Get tournament summary statistics
+SELECT 
+    tournament_name,        -- e.g., "FIFA World Cup 2026"
+    total_matches,          -- Total matches in tournament
+    completed_matches,      -- Matches finished
+    remaining_matches,      -- Matches yet to be played
+    total_goals,            -- Total goals scored
+    avg_goals_per_match,    -- Average goals per completed match
+    current_round,          -- e.g., "Group Stage", "Quarter Finals", "Semi Finals"
+    teams_remaining,        -- Number of teams still in competition
+    top_scorer_name,        -- Current leading scorer
+    top_scorer_goals        -- Goals by top scorer
+FROM singhal.fifa_worldcup_gold.gold_tournament_summary;
+
+Query Output Columns:
+  - tournament_name (string): Tournament name
+  - total_matches (bigint): Total matches scheduled
+  - completed_matches (bigint): Matches finished
+  - remaining_matches (bigint): Matches yet to be played
+  - total_goals (bigint): Total goals scored in tournament
+  - avg_goals_per_match (double): Average goals per completed match
+  - current_round (string): Current tournament stage
+  - teams_remaining (bigint): Teams still competing
+  - top_scorer_name (string): Leading goal scorer
+  - top_scorer_goals (int): Goals by top scorer
+
+Notes:
+  - Single-row result (tournament-level aggregate)
+  - Updates dynamically as matches complete
+  - avg_goals_per_match = total_goals / completed_matches
+  - remaining_matches = total_matches - completed_matches
+  - top_scorer synced with gold_player_leaderboard
+
+Example Output:
+  tournament_name: "FIFA World Cup 2026"
+  total_matches: 104
+  completed_matches: 48
+  remaining_matches: 56
+  total_goals: 138
+  avg_goals_per_match: 2.875
+  current_round: "Round of 16"
+  teams_remaining: 16
+  top_scorer_name: "Kylian Mbappé"
+  top_scorer_goals: 8
+
+================================================================================
+DASHBOARD DISPLAY EXAMPLES
+================================================================================
+
+Example 1: Tournament Bracket Interaction - Requirement 1
+  
+  User views knockout bracket structure:
+  
+  ┌──────────────────────────────────────────────────────────┐
+  │ QUARTER FINALS          SEMI FINALS            FINAL     │
+  ├──────────────────────────────────────────────────────────┤
+  │                                                           │
+  │ QF1: 🇦🇷 ARG vs 🇧🇷 BRA  ┐                              │
+  │      (2-1)               ├─→ SF1: 🇦🇷 ARG vs TBD        │
+  │ QF2: 🇫🇷 FRA vs 🇩🇪 GER  ┘      (Upcoming)        ┐      │
+  │      (3-2)                                       │      │
+  │                                                  ├─→ FIN │
+  │ QF3: 🇬🇧 ENG vs 🇪🇸 ESP  ┐                       │      │
+  │      (1-1, 4-3 pens)     ├─→ SF2: 🇬🇧 ENG vs TBD │      │
+  │ QF4: Winner of R16-8     ┘      (Upcoming)        ┘      │
+  │                                                           │
+  └──────────────────────────────────────────────────────────┘
+  
+  User clicks 🇦🇷 Argentina flag →
+  
+  Dashboard shows match detail:
+    Match: Argentina vs Brazil (Quarter Final 1)
+    Stadium: MetLife Stadium, New Jersey, United States
+    Time: 2026-07-09 19:00:00 UTC
+    Score: Argentina 2 - 1 Brazil
+    Goals:
+      🇦🇷 Messi (23')
+      🇧🇷 Neymar (45+3')
+      🇦🇷 Di Maria (67')
+
+Example 2: Top 10 Scorers with Spider Chart - Requirement 2
+  
+  Main leaderboard display:
+  
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ RANK | PLAYER           | TEAM  | GOALS | ASSISTS | RATING      │
+  ├──────┼──────────────────┼───────┼───────┼─────────┼─────────────┤
+  │  1   | 🧑 Kylian Mbappé | 🇫🇷 FRA | 8     | 3       | ⭐ 8.5      │
+  │  2   | 🧑 Lionel Messi  | 🇦🇷 ARG | 7     | 4       | ⭐ 9.2      │
+  │  3   | 🧑 Harry Kane    | 🇬🇧 ENG | 6     | 2       | ⭐ 8.1      │
+  │  4   | 🧑 Neymar Jr     | 🇧🇷 BRA | 5     | 3       | ⭐ 8.3      │
+  │  5   | 🧑 Ronaldo       | 🇵🇹 POR | 5     | 1       | ⭐ 7.9      │
+  └─────────────────────────────────────────────────────────────────┘
+  
+  User clicks Messi →
+  
+  Spider chart displays:
+              Goals (95th %)
+                    /\
+                   /  \
+                  /    \
+    Assists ────/──────\──── Matches
+     (92nd %)  /        \    (85th %)
+              /          \
+             /            \
+            /______________\
+        Minutes (88th %)
+    
+    Rating: 9.2/10 🇦🇷
+    Most goals against: Poland (3 goals)
+
+Example 3: Live & Upcoming Matches - Requirement 3
+  
+  ┌──────────────────────────────────────────────────────────┐
+  │ 🔴 LIVE MATCHES                                          │
+  ├──────────────────────────────────────────────────────────┤
+  │ 🇦🇷 Argentina 2-1 🇫🇷 France (Quarter Final)            │
+  │ ⏱️  78' - MetLife Stadium, New Jersey                    │
+  │ Top scorers: Messi (7), Mbappé (8)                       │
+  └──────────────────────────────────────────────────────────┘
+  
+  ┌──────────────────────────────────────────────────────────┐
+  │ ⏰ UPCOMING MATCHES                                       │
+  ├──────────────────────────────────────────────────────────┤
+  │ 🇧🇷 Brazil vs 🇩🇪 Germany (Quarter Final)                │
+  │ ⏰ Kickoff in 3h 30m - SoFi Stadium, Los Angeles         │
+  │ Top scorers: Neymar (5), Müller (4)                      │
+  │                                                           │
+  │ 🇬🇧 England vs 🇪🇸 Spain (Quarter Final)                 │
+  │ ⏰ Kickoff in 7h 15m - AT&T Stadium, Dallas              │
+  │ Top scorers: Kane (6), Morata (3)                        │
+  └──────────────────────────────────────────────────────────┘
+
+Example 4: Finished Matches History - Requirement 4
+  
+  ┌───────────────────────────────────────────────────────────────────┐
+  │ MATCH HISTORY - ALL FINISHED MATCHES                              │
+  ├───────┬────────────────────┬───────────┬───────────┬──────────────┤
+  │ ID    | TEAMS              | SCORE     | WINNER    | DATE & CITY  │
+  ├───────┼────────────────────┼───────────┼───────────┼──────────────┤
+  │ 64    | 🇦🇷 ARG vs 🇫🇷 FRA | 3-3 (PK)  | Argentina | 07/18, NJ    │
+  │ 63    | 🇧🇷 BRA vs 🇩🇪 GER | 1-0       | Brazil    | 07/17, LA    │
+  │ 62    | 🇬🇧 ENG vs 🇪🇸 ESP | 2-1       | England   | 07/16, DAL   │
+  │ 61    | 🇦🇷 ARG vs 🇧🇷 BRA | 2-1       | Argentina | 07/09, NJ    │
+  │ 60    | 🇫🇷 FRA vs 🇩🇪 GER | 3-2       | France    | 07/09, LA    │
+  └───────┴────────────────────┴───────────┴───────────┴──────────────┘
+  
+  Note: 3-3 (PK) indicates penalty shootout victory (actual penalty scores not available)
+
+Example 5: Points Table with Team History - Requirement 5
+  
+  MAIN VIEW (always visible):
+  
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ TOURNAMENT POINTS TABLE                                                    │
+  ├──────┬───────────┬──────┬─────┬───┬───┬───┬────┬────┬────┬────┬───────────┤
+  │ Rank | Team      | Logo | Pts | W | L | D | GF | GA | GD | CS | Status    │
+  ├──────┼───────────┼──────┼─────┼───┼───┼───┼────┼────┼────┼────┼───────────┤
+  │  1   | Argentina | 🇦🇷  | 19  | 6 | 0 | 1 | 15 | 5  | +10| 3  | Qualified │
+  │  2   | France    | 🇫🇷  | 16  | 5 | 1 | 1 | 14 | 7  | +7 | 2  | Qualified │
+  │  3   | Brazil    | 🇧🇷  | 15  | 5 | 2 | 0 | 13 | 8  | +5 | 4  | Qualified │
+  │  4   | Germany   | 🇩🇪  | 13  | 4 | 1 | 1 | 11 | 6  | +5 | 3  | Qualified │
+  │  5   | England   | 🇬🇧  | 12  | 4 | 2 | 0 | 10 | 7  | +3 | 2  | Qualified │
+  └──────┴───────────┴──────┴─────┴───┴───┴───┴────┴────┴────┴────┴───────────┘
+  
+  Legend: Pts=Points, W=Wins, L=Losses, D=Draws, GF=Goals For, GA=Goals Against, 
+          GD=Goal Difference, CS=Clean Sheets
+  
+  User clicks 🇦🇷 Argentina flag →
+  
+  ┌──────────────────────────────────────────────────────────┐
+  │ 🇦🇷 ARGENTINA - MATCH HISTORY                           │
+  ├──────────────────────────────────────────────────────────┤
+  │ vs 🇲🇽 Mexico: Won 3-0 (Group Stage)                     │
+  │ vs 🇵🇱 Poland: Won 2-0 (Group Stage)                     │
+  │ vs 🇭🇷 Croatia: Won 3-0 (Round of 16)                    │
+  │ vs 🇳🇱 Netherlands: Draw 2-2 (Quarter Final)             │
+  │ vs 🇫🇷 France: Won 3-3 (penalties) (Final)              │
+  └──────────────────────────────────────────────────────────┘
+
+Example 6: Golden Boot Race Progression - Requirement 6
+  
+  Line Graph showing cumulative goals over tournament matches:
+  
+      Goals
+        8 |                                    ━━━ Mbappé 🥇
+          |                                  /
+        7 |                          ━━━━━━━ Messi 🥇
+          |                        /
+        6 |                    ━━━━ Kane 🥈
+          |                  /
+        5 |              ━━━━
+          |            /
+        4 |        ━━━━
+          |      /
+        3 |  ━━━━
+          |━━
+        2 |━
+        1 |
+          +────────────────────────────────────────────> Matches
+           1  5  10  15  20  25  30  35  40  45  50  55
+  
+  Current Standings (filtered from same data):
+  ┌──────────────────────────────────────────────────────┐
+  │ 🥇 Kylian Mbappé (🇫🇷) - 8 goals, 3 assists, 650 min │
+  │ 🥇 Lionel Messi (🇦🇷) - 8 goals, 4 assists, 630 min  │
+  │    (Tied 1st - more assists)                         │
+  │ 🥈 Harry Kane (🇬🇧) - 6 goals, 2 assists, 580 min    │
+  └──────────────────────────────────────────────────────┘
+
+Example 7: Tournament Summary Dashboard - Requirement 7
+  
+  ┌──────────────────────────────────────────────────────────┐
+  │ 🏆 FIFA WORLD CUP 2026                                   │
+  ├──────────────────────────────────────────────────────────┤
+  │                                                           │
+  │ Current Stage: Round of 16                               │
+  │                                                           │
+  │ Match Progress:                                          │
+  │ ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░ 48/104 matches                 │
+  │ ✅ Completed: 48  |  ⏰ Remaining: 56                    │
+  │                                                           │
+  │ Goals Statistics:                                        │
+  │ ⚽ Total Goals: 138                                       │
+  │ 📊 Average: 2.88 goals per match                         │
+  │                                                           │
+  │ Tournament Status:                                       │
+  │ 🏟️  Teams Remaining: 16 of 48 teams                      │
+  │ 👟 Top Scorer: Kylian Mbappé (8 goals)                   │
+  │                                                           │
+  └──────────────────────────────────────────────────────────┘
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+Generated: 2025-07-04
+Last Updated: 2025-07-04
+Pipeline: fifa_WorldCup_2026
+Catalog: singhal
+Schema: fifa_worldcup_gold
+Total Requirements: 7
+Total Gold Tables: 6 (unified fact table architecture)
+
+Tables:
+  1. gold_fact_match_schedule (unified: bracket + schedule + scorers)
+  2. gold_fact_team_performance (unified: points table + team summary + top performers)
+  3. gold_team_goals (goal-by-goal details)
+  4. gold_player_leaderboard (top 10 scorers)
+  5. gold_golden_boot_race (progression timeline)
+  6. gold_tournament_summary (overall stats)
