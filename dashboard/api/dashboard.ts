@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { queries } from "./queries.ts";
 
 const HOST = process.env.DATABRICKS_HOST!;
 const TOKEN = process.env.DATABRICKS_TOKEN!;
@@ -28,7 +29,6 @@ async function executeSQL(statement: string) {
     throw new Error(JSON.stringify(json, null, 2));
   }
 
-  // Convert Databricks response to array of objects
   const columns = json.manifest.schema.columns.map((c: any) => c.name);
 
   return json.result.data_array.map((row: any[]) => {
@@ -47,10 +47,25 @@ export default async function handler(
   res: VercelResponse
 ) {
   try {
-    const summary = await executeSQL(`
-      SELECT *
-      FROM singhal.fifa_worldcup_gold.gold_tournament_summary
-    `);
+    const [
+      tournamentSummary,
+      fixture,
+      topScorers,
+      upcomingMatches,
+      finishedMatches,
+      teamPerformance,
+      teamMatchesHistory,
+      goldenBootRace,
+    ] = await Promise.all([
+      executeSQL(queries.tournament_summary),
+      executeSQL(queries.fixture),
+      executeSQL(queries.top_scorers),
+      executeSQL(queries.upcoming_matches),
+      executeSQL(queries.finished_matches),
+      executeSQL(queries.team_performance),
+      executeSQL(queries.team_matches_history),
+      executeSQL(queries.golden_boot_race),
+    ]);
 
     res.setHeader(
       "Cache-Control",
@@ -59,7 +74,15 @@ export default async function handler(
 
     return res.status(200).json({
       success: true,
-      summary,
+
+      tournament_summary: tournamentSummary,
+      fixture: fixture,
+      top_scorers: topScorers,
+      upcoming_matches: upcomingMatches,
+      finished_matches: finishedMatches,
+      team_performance: teamPerformance,
+      team_matches_history: teamMatchesHistory,
+      golden_boot_race: goldenBootRace,
     });
   } catch (error: any) {
     console.error(error);
