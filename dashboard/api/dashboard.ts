@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { queries } from "./queries.ts";
+import { queries } from "./queries";
 
 const HOST = process.env.DATABRICKS_HOST!;
 const TOKEN = process.env.DATABRICKS_TOKEN!;
