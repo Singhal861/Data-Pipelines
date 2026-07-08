@@ -148,10 +148,97 @@ print(f"="*80)
 
 bracket_rows = []
 
-# BUILD BRACKET STRUCTURE FROM API DATA (no hardcoded mapping!)
-# The API provides home_team_label/away_team_label like "Winner Match 74" which tells us the progression
+# BUILD BRACKET STRUCTURE (OFFICIAL FIFA BRACKET)
+# - R32 positions: Hardcoded official bracket order
+# - R32 → R16: Hardcoded official bracket progression
+# - R16 positions: Derived from API feeder labels (to handle actual match results)
+# - QF → SF → Final: From API
 
-# First, extract the bracket progression from API labels
+# 🔧 STEP 1: HARDCODED R32→R16 OFFICIAL BRACKET PROGRESSION
+print(f"\n📊 Building R32→R16 mapping (official bracket structure)...")
+
+# Official bracket progression (based on FIFA tournament rules)
+r32_feeds_into_override = {
+    '73': 'R16-1',   # R32-1: South Africa vs Canada
+    '75': 'R16-1',   # R32-2: Netherlands vs Morocco
+    '74': 'R16-2',   # R32-3: Germany vs Paraguay
+    '77': 'R16-2',   # R32-4: France vs Sweden
+    '82': 'R16-3',   # R32-5: Belgium vs Senegal
+    '81': 'R16-3',   # R32-6: USA vs Bosnia
+    '84': 'R16-4',   # R32-7: Spain vs Austria
+    '83': 'R16-4',   # R32-8: Portugal vs Croatia
+    '76': 'R16-5',   # R32-9: Brazil vs Japan
+    '78': 'R16-5',   # R32-10: Côte d'Ivoire vs Norway
+    '79': 'R16-6',   # R32-11: Mexico vs Ecuador
+    '80': 'R16-6',   # R32-12: England vs DR Congo
+    '85': 'R16-7',   # R32-13: Switzerland vs Algeria
+    '87': 'R16-7',   # R32-14: Colombia vs Ghana
+    '88': 'R16-8',   # R32-15: Australia vs Egypt
+    '86': 'R16-8',   # R32-16: Argentina vs Cabo Verde
+}
+
+print(f"✅ Official R32→R16 bracket progression:")
+for r16_pos in ['R16-1', 'R16-2', 'R16-3', 'R16-4', 'R16-5', 'R16-6', 'R16-7', 'R16-8']:
+    r32_list = [k for k, v in r32_feeds_into_override.items() if v == r16_pos]
+    print(f"   {r16_pos}: R32 matches {sorted(r32_list)} feed into it")
+
+# Build R16 match_id to position mapping (based on which R32 matches feed into them)
+r16_matches = [m for m in knockout_matches if m.match_type == 'r16']
+r16_match_to_position = {}  # Maps R16 match_id -> bracket position
+
+for r16_match in r16_matches:
+    # Extract which R32 matches feed into this R16 match from API labels
+    home_label = getattr(r16_match, 'home_team_label', '')
+    away_label = getattr(r16_match, 'away_team_label', '')
+    
+    feeder_ids = []
+    if home_label and 'Winner Match' in home_label:
+        feeder_ids.append(home_label.replace('Winner Match ', '').strip())
+    if away_label and 'Winner Match' in away_label:
+        feeder_ids.append(away_label.replace('Winner Match ', '').strip())
+    
+    # Find which R16 position these R32 feeders map to
+    for r16_pos, r32_ids in [('R16-1', ['73', '75']), ('R16-2', ['74', '77']), 
+                              ('R16-3', ['82', '81']), ('R16-4', ['84', '83']),
+                              ('R16-5', ['76', '78']), ('R16-6', ['79', '80']),
+                              ('R16-7', ['85', '87']), ('R16-8', ['88', '86'])]:
+        if set(feeder_ids) == set(r32_ids):
+            r16_match_to_position[r16_match.match_id] = r16_pos
+            break
+
+print(f"\n✅ R16 match_id to position mapping:")
+for r16_id, r16_pos in sorted(r16_match_to_position.items(), key=lambda x: int(x[1].split('-')[1])):
+    print(f"   Match {r16_id} → {r16_pos}")
+
+# 🔧 STEP 2: HARDCODED R32 OFFICIAL BRACKET ORDER
+# This is the official FIFA tournament bracket structure (not derived from API)
+print(f"\n📊 Building R32 position mapping (official bracket order)...")
+
+# Official R32 bracket order (match_id -> bracket_position)
+r32_match_to_position = {
+    '73': 'R32-1',   # South Africa vs Canada
+    '75': 'R32-2',   # Netherlands vs Morocco
+    '74': 'R32-3',   # Germany vs Paraguay
+    '77': 'R32-4',   # France vs Sweden
+    '82': 'R32-5',   # Belgium vs Senegal
+    '81': 'R32-6',   # USA vs Bosnia
+    '84': 'R32-7',   # Spain vs Austria
+    '83': 'R32-8',   # Portugal vs Croatia
+    '76': 'R32-9',   # Brazil vs Japan
+    '78': 'R32-10',  # Côte d'Ivoire vs Norway
+    '79': 'R32-11',  # Mexico vs Ecuador
+    '80': 'R32-12',  # England vs DR Congo
+    '85': 'R32-13',  # Switzerland vs Algeria
+    '87': 'R32-14',  # Colombia vs Ghana
+    '88': 'R32-15',  # Australia vs Egypt
+    '86': 'R32-16',  # Argentina vs Cabo Verde
+}
+
+print(f"✅ Assigned R32 positions based on official bracket structure:")
+for r32_id in ['73', '75', '74', '77', '82', '81', '84', '83', '76', '78', '79', '80', '85', '87', '88', '86']:
+    print(f"   Match {r32_id} → {r32_match_to_position[r32_id]} (feeds into {r32_feeds_into_override.get(r32_id)})")
+
+# Extract bracket progression from API labels (for R16 onwards)
 knockout_structure = []
 match_to_feeds_into = {}  # Maps match_id -> position it feeds into
 
@@ -178,11 +265,21 @@ for match in knockout_matches:
     
     # Determine position (e.g., R32-1, R16-3, QF-1)
     if match_type == 'r32':
-        position_num = int(match_id) - 72  # Match 73 = R32-1
-        position = f"{round_code}-{position_num}"
+        # 🔧 Use extracted R32 position from the mapping built above
+        position = r32_match_to_position.get(match_id)
+        if not position:
+            # Fallback: if match not found in mapping, assign sequentially
+            position_num = int(match_id) - 72
+            position = f"{round_code}-{position_num}"
+            print(f"   ⚠️ Warning: R32 match {match_id} not found in extracted mapping, using fallback {position}")
     elif match_type == 'r16':
-        position_num = int(match_id) - 88  # Match 89 = R16-1
-        position = f"{round_code}-{position_num}"
+        # 🔧 Use extracted R16 position from the mapping built above
+        position = r16_match_to_position.get(match_id)
+        if not position:
+            # Fallback: if match not found in mapping, assign sequentially
+            position_num = int(match_id) - 88
+            position = f"{round_code}-{position_num}"
+            print(f"   ⚠️ Warning: R16 match {match_id} not found in extracted mapping, using fallback {position}")
     elif match_type == 'qf':
         position_num = int(match_id) - 96  # Match 97 = QF-1
         position = f"{round_code}-{position_num}"
@@ -227,13 +324,21 @@ for match in knockout_matches:
         'bracket_side': bracket_side,
     })
 
-# Second pass: assign feeds_into values now that we have complete mapping
+# Second pass: assign feeds_into values
+# - For R32: use hardcoded override (API labels are wrong)
+# - For R16+: use API-extracted mapping (correct)
 for structure in knockout_structure:
-    structure['feeds_into'] = match_to_feeds_into.get(structure['match_id'])
+    if structure['match_id'] in r32_feeds_into_override:
+        # R32 matches: use hardcoded mapping
+        structure['feeds_into'] = r32_feeds_into_override[structure['match_id']]
+    else:
+        # R16, QF, SF, Final: use API labels (correct)
+        structure['feeds_into'] = match_to_feeds_into.get(structure['match_id'])
 
-print(f"✅ Extracted bracket structure from API labels")
-print(f"   Mapped {len(match_to_feeds_into)} progression paths from API data")
-print(f"   Built {len(knockout_structure)} bracket entries")
+print(f"✅ Built bracket structure (hybrid approach)")
+print(f"   R32 → R16: {len(r32_feeds_into_override)} hardcoded mappings (API labels incorrect)")
+print(f"   R16+: {len(match_to_feeds_into)} mappings from API (correct)")
+print(f"   Total: {len(knockout_structure)} bracket entries")
 
 # OLD HARDCODED VERSION (removed):
 #knockout_structure = [

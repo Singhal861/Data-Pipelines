@@ -11,7 +11,7 @@ WITH timezone_ref AS (
     SELECT * FROM {{ source('silver', 'ref_stadium_enriched') }}
 ),
 
--- Get match sequence based on UTC time
+-- Get match sequence based on UTC time with smart boundaries
 matches_with_sequence AS (
     SELECT
         m.match_id,
@@ -24,7 +24,17 @@ matches_with_sequence AS (
                 REGEXP_REPLACE(m.match_date_local, ' [A-Z]{3,4}$', ''),
                 'MM/dd/yyyy HH:mm'
             ) - MAKE_DT_INTERVAL(0, tz.utc_offset_hours, 0, 0)
-        ) AS match_sequence
+        ) AS match_sequence,
+        -- Get next match datetime to prevent back-to-back overlap
+        LEAD(TO_TIMESTAMP(
+            REGEXP_REPLACE(m.match_date_local, ' [A-Z]{3,4}$', ''),
+            'MM/dd/yyyy HH:mm'
+        ) - MAKE_DT_INTERVAL(0, tz.utc_offset_hours, 0, 0)) OVER (ORDER BY 
+            TO_TIMESTAMP(
+                REGEXP_REPLACE(m.match_date_local, ' [A-Z]{3,4}$', ''),
+                'MM/dd/yyyy HH:mm'
+            ) - MAKE_DT_INTERVAL(0, tz.utc_offset_hours, 0, 0)
+        ) AS next_match_datetime_utc
     FROM {{ ref('silver_matches') }} m
     JOIN timezone_ref tz ON m.stadium_id = tz.stadium_id
     WHERE m.is_finished = TRUE
@@ -81,7 +91,10 @@ top_3_history_at_each_match AS (
     CROSS JOIN current_top_3_players ct3
     INNER JOIN {{ ref('silver_player_stats_history') }} ps 
         ON ps.player_id = ct3.player_id
-    WHERE ps.valid_from <= mws.match_datetime_utc + INTERVAL 6 HOURS  -- Include stats updated within 6 hours after match
+    WHERE ps.valid_from <= COALESCE(
+        mws.next_match_datetime_utc,  -- Use next match if exists (prevents overlap)
+        mws.match_datetime_utc + INTERVAL 24 HOURS  -- Else fall back to 24h for last match
+    )
 ),
 
 -- Keep only latest snapshot per player per match

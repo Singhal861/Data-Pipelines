@@ -218,7 +218,7 @@ Match-by-match timeline for Dashboard #6.
 -- Key Logic:
 1. Identify current top 3 from latest player snapshot (valid_to IS NULL)
 2. Filter matches: WHERE is_finished = TRUE (no future matches)
-3. Use 6-hour buffer for stat updates after match finish
+3. Use 24-hour buffer for stat updates after match finish
 4. Flag latest records: is_current_top_3 = TRUE for current top 3
 
 -- Key Features:
@@ -435,8 +435,25 @@ Derived from `bronze.matches` (home_scorers/away_scorers) in silver layer, avoid
 ### **5. Unified Match Table**
 `silver_matches` unions group + knockout into single source of truth. **All team name normalization logic lives here.**
 
-### **6. 6-Hour Post-Match Buffer**
-Golden Boot Race uses `valid_from <= match_datetime_utc + INTERVAL 6 HOURS` because player stats update hours after match finish (e.g., Mbappé's goal in match 92 updated at 21:31 UTC, 2.5 hours after 19:00 finish).
+### **6. Smart Boundary Logic (Prevents Back-to-Back Overlap)**
+Golden Boot Race uses **next-match-aware boundaries** instead of fixed time windows:
+```sql
+ps.valid_from <= COALESCE(
+    next_match_datetime_utc,  -- Use next match if exists
+    match_datetime_utc + INTERVAL 24 HOURS  -- Else 24h for last match
+)
+```
+
+**Why this matters:**
+* **Problem:** Fixed 24h windows overlap when matches are <24h apart (France: 6h, Norway: 3h gaps found)
+* **Impact:** Same snapshot appears in multiple matches → duplicate goal counts
+* **Solution:** Use next match start as boundary → each snapshot attributed to exactly one match
+* **Fallback:** For the last match (no next match), use 24h buffer to catch delayed API updates
+
+**Evolution:**
+1. Originally 6 hours (insufficient for API delays)
+2. Increased to 24 hours (fixed Match 95: 11.87h delay)
+3. Smart boundary (prevents back-to-back overlap while keeping 24h safety net)
 
 ### **7. TBD Opponent Logic**
 Dashboard #1 (Tournament Bracket) handles future knockout matches:
