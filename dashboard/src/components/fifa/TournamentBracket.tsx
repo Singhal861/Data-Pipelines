@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { loadBracket, parseGoalsDetail, formatUtc} from "@/lib/fifa/data";
+import { loadBracket, parseGoalsDetail, formatUtc, formatUtcShort } from "@/lib/fifa/data";
 import type { BracketMatch } from "@/lib/fifa/types";
 
 const STAGES = ["Round of 32", "Round of 16", "Quarter Final", "Semi Final", "Final"] as const;
@@ -233,6 +233,16 @@ function MatchCard({
           : "border-border ring-border/40 hover:border-primary/60"
       }`}
     >
+      <div className="flex items-center justify-between border-b border-border bg-background/80 px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
+        <span className="truncate">
+          {m.match_datetime_utc ? formatUtcShort(m.match_datetime_utc) : m.bracket_position}
+        </span>
+        {m.match_status === "Live" ? (
+          <span className="animate-pulse text-red-400">● LIVE</span>
+        ) : pen ? (
+          <span className="text-orange-400">PEN</span>
+        ) : null}
+      </div>
       <TeamRow
         name={home.name}
         logo={home.logo}
@@ -252,19 +262,6 @@ function MatchCard({
         onClick={onOpen}
         onHover={onHoverTeam}
       />
-
-      <div className="flex items-center justify-between border-t border-border bg-background/80 px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
-        <span>{m.bracket_position}</span>
-        <span>
-          {m.match_status === "Finished" ? (
-            pen ? "PEN" : "FT"
-          ) : m.match_status === "Live" ? (
-            <span className="animate-pulse text-red-400">● LIVE</span>
-          ) : (
-            "Upcoming"
-          )}
-        </span>
-      </div>
     </div>
   );
 }

@@ -6,19 +6,26 @@ export function PointsTable() {
   const { data: points } = useQuery({ queryKey: ["fifa", "points"], queryFn: loadPoints });
   const { data: history } = useQuery({ queryKey: ["fifa", "history"], queryFn: loadTeamHistory });
   const [team, setTeam] = useState<string | null>(null);
+  const [q, setQ] = useState("");
 
-  const rows = useMemo(
-    () =>
-      (points ?? [])
-        .slice()
-        .sort(
-          (a, b) =>
-            b.total_points - a.total_points ||
-            b.goal_difference - a.goal_difference ||
-            b.goals_for - a.goals_for,
-        ),
-    [points],
-  );
+  const rows = useMemo(() => {
+    const sorted = (points ?? [])
+      .slice()
+      .sort(
+        (a, b) =>
+          b.total_points - a.total_points ||
+          b.goal_difference - a.goal_difference ||
+          b.goals_for - a.goals_for,
+      );
+    if (!q) return sorted;
+    const s = q.toLowerCase();
+    return sorted.filter(
+      (r) =>
+        r.team_name.toLowerCase().includes(s) ||
+        (r.group_name ?? "").toLowerCase().includes(s) ||
+        (r.qualification_status ?? "").toLowerCase().includes(s),
+    );
+  }, [points, q]);
 
   const teamHistory = useMemo(
     () =>
@@ -28,11 +35,22 @@ export function PointsTable() {
     [history, team],
   );
 
+  // ~10 rows visible; each row ~40px + header ~36px
+  const ROW_H = 40;
+  const VISIBLE = 10;
+  const maxH = VISIBLE * ROW_H + 40;
+
   return (
-    <div>
-      <div className="overflow-x-auto rounded-lg border bg-card">
+    <div className="space-y-2">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search team, group, or status…"
+        className="w-full max-w-xs rounded-md border bg-background px-3 py-1.5 text-sm"
+      />
+      <div className="overflow-auto rounded-lg border bg-card" style={{ maxHeight: maxH }}>
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground backdrop-blur">
             <tr>
               <th className="px-3 py-2">#</th>
               <th className="px-3 py-2">Team</th>

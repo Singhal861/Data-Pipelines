@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { TournamentSummary } from "@/components/fifa/TournamentSummary";
 import { TournamentBracket } from "@/components/fifa/TournamentBracket";
 import { TopScorers } from "@/components/fifa/TopScorers";
-import { LiveUpcomingMatches } from "@/components/fifa/LiveUpcomingMatches";
+import { LiveOrResults } from "@/components/fifa/LiveOrResults";
 import { FinishedMatchesTable } from "@/components/fifa/FinishedMatchesTable";
 import { PointsTable } from "@/components/fifa/PointsTable";
 import { GoldenBootProgression } from "@/components/fifa/GoldenBootProgression";
@@ -105,9 +105,7 @@ function DashboardPage() {
         <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
           <TournamentSummary />
         </div>
-        <Section title="Live & Upcoming">
-          <LiveUpcomingMatches />
-        </Section>
+        <LiveOrResults />
         <Section title="Tournament Bracket">
           <TournamentBracket />
         </Section>

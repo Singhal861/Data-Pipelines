@@ -94,7 +94,18 @@ function PlayerModal({ player, onClose }: { player: TopScorer; onClose: () => vo
               <PolarAngleAxis dataKey="metric" />
               <PolarRadiusAxis angle={30} domain={[0, 100]} />
               <Radar dataKey="value" stroke="hsl(var(--primary))" fill="var(--spider-fill)" fillOpacity={1} />
-              <Tooltip />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  color: "var(--foreground)",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.35)",
+                }}
+                labelStyle={{ color: "var(--foreground)", fontWeight: 600 }}
+                itemStyle={{ color: "var(--foreground)" }}
+                cursor={{ stroke: "var(--primary)", strokeOpacity: 0.4 }}
+              />
             </RadarChart>
           </ResponsiveContainer>
         </div>
