@@ -1,10 +1,10 @@
-# FIFA World Cup 2026 Dashboard - Data Pipeline
+## ![](path)# FIFA World Cup 2026 Dashboard - Data Pipeline
 
 ## 📊 Project Overview
 
 Complete data pipeline for FIFA World Cup 2026 dashboard implementing Bronze → Silver → Gold medallion architecture with dbt transformations. Supports **7 core dashboard representations** with live match tracking, player statistics, knockout brackets, and tournament visualization.
 
-**Scheduled Job:** `fifa_WorldCup_2026` (Job ID: 616242111057580)  
+**Scheduled Job:** `fifa_WorldCup_2026`  
 **Schedule:** Twice daily (due to Databricks free edition limitations)  
 **Catalog:** `singhal` (Unity Catalog)
 
@@ -302,7 +302,6 @@ ROW_NUMBER() OVER (
 
 ### **Databricks Job: fifa_WorldCup_2026**
 
-**Job ID:** 616242111057580  
 **Schedule:** Twice daily (due to Databricks free edition limitations)  
 **Status:** Active
 
@@ -329,16 +328,22 @@ ROW_NUMBER() OVER (
 
 ## 📁 Project Structure
 
+### **FIFA_WC_26/** (dbt Project)
+
 ```
-Data-Pipelines/
+FIFA_WC_26/
+├── README.md
+│
 ├── dbt_project.yml          # dbt config
 ├── profiles.yml             # Databricks connection
 ├── packages.yml             # dbt_utils, dbt_expectations
+├── package-lock.yml
 │
 ├── models/
 │   ├── sources.yml          # Bronze + Silver sources
 │   │
 │   ├── silver/
+│   │   ├── sources.yml               # Silver layer sources
 │   │   ├── silver_matches.yml        # Silver tests
 │   │   ├── silver_teams.sql
 │   │   ├── silver_players.sql
@@ -360,13 +365,51 @@ Data-Pipelines/
 │       └── gold_tournament_summary.sql      # DR #7
 │
 ├── tests/
-│   ├── pre_gold/           # 6 pre-gold assertions
-│   ├── gold/               # 6 dashboard-aligned tests
-│   └── silver/             # Custom silver tests
+│   ├── assert_player_stats_*.sql       # 7 player stats tests
+│   │
+│   ├── pre_gold/                       # 6 pre-gold assertions
+│   │   ├── assert_scorer_name_completeness.sql
+│   │   ├── assert_all_matches_have_timezone_mapping.sql
+│   │   ├── assert_top_scorers_have_complete_stats.sql
+│   │   ├── assert_match_datetime_parseable.sql
+│   │   ├── assert_all_players_have_valid_teams.sql
+│   │   └── assert_no_orphaned_goal_events.sql
+│   │
+│   ├── gold/                           # 6 dashboard-aligned tests
+│   │   ├── schema.yml
+│   │   ├── README.md
+│   │   ├── test_req1_tournament_bracket_completeness.sql
+│   │   ├── test_req2_player_leaderboard_completeness.sql
+│   │   ├── test_req3_match_schedule_completeness.sql
+│   │   ├── test_req4_team_performance_completeness.sql
+│   │   ├── test_req5_points_table_completeness.sql
+│   │   └── test_req6_golden_boot_race_completeness.sql
+│   │
+│   └── silver/                         # Custom silver tests
+│       └── test_team_logo_join.sql
 │
-└── macros/
-    └── generate_schema_name.sql
+├── macros/
+│   └── generate_schema_name.sql
+│
+└── dashboard/                          # React + TypeScript (separate deployment)
 ```
+
+---
+
+### **Bronze Layer Notebooks** (Databricks Workspace)
+
+Located in: `/Workspace/Users/abhisheksinghal861@gmail.com/Databricks_core_notebooks/Bronze_layer_data_fetch/`
+
+* **fifa 2026 Static Raw data fetch** - Fetches players, teams, matches, stadiums, group standings from dual APIs
+* **Knockout Bracket RAW Analysis** - Builds tournament tree structure with timezone mappings
+
+---
+
+### **Optimization Layer Notebook** (Databricks Workspace)
+
+Located in: `/Workspace/Users/abhisheksinghal861@gmail.com/Databricks_core_notebooks/`
+
+* **Performance Optimization** - Runs OPTIMIZE, Z-ORDER, and VACUUM commands on high-traffic gold tables
 
 ---
 
@@ -430,17 +473,6 @@ Separate optimization pipeline implements Databricks best practices:
 
 ---
 
-## 📚 Additional Resources
-
-* **Bronze Notebooks:**
-  - `/Workspace/Users/abhisheksinghal861@gmail.com/Databricks_core_notebooks/Bronze_layer_data_fetch/fifa 2026 Static Raw data fetch`
-  - `/Workspace/Users/abhisheksinghal861@gmail.com/Databricks_core_notebooks/Bronze_layer_data_fetch/Knockout Bracket RAW Analysis`
-* **Unity Catalog:** `singhal.fifa_worldcup_bronze`, `singhal.fifa_worldcup_silver`, `singhal.fifa_worldcup_gold`
-* **Pipeline Job:** [fifa_WorldCup_2026](#job-616242111057580)
-* **Live Dashboard:** [https://singhal-fifa-2026-dashboard.vercel.app/](https://singhal-fifa-2026-dashboard.vercel.app/)
-
----
-
 ## 👤 Contact
 
 Maintainer: Abhishek Singhal  
@@ -449,7 +481,23 @@ Workspace: Databricks (AWS)
 
 ---
 
-**Last Updated:** July 6, 2026  
+## 📄 License & Copyright
+
+**Copyright © 2026 Abhishek Singhal. All Rights Reserved.**
+
+This project and its associated documentation, source code, data models, and dashboard implementations are the intellectual property of Abhishek Singhal.
+
+### Terms of Use
+
+* **No Reproduction:** No part of this project may be reproduced, distributed, or transmitted in any form or by any means without prior written permission from the copyright holder.
+* **No Commercial Use:** This project is intended for educational and portfolio demonstration purposes only. Commercial use, redistribution, or derivative works are strictly prohibited without explicit authorization.
+* **Attribution Required:** Any reference to this work must include proper attribution to the author.
+
+For permissions, licensing inquiries, or collaboration opportunities, please contact: abhisheksinghal861@gmail.com
+
+---
+
+**Last Updated:** July 8, 2026  
 **dbt Version:** 1.11+  
 **Databricks Runtime:** Serverless (AWS)  
 **Dashboard Representations:** 7 (Tournament Bracket, Top Scorers, Live Matches, Match History, Points Table, Golden Boot Race, Tournament Summary)
