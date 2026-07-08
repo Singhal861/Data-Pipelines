@@ -6,14 +6,17 @@ export function TournamentSummary() {
   const s = data?.[0];
   if (!s) return <div className="text-sm text-muted-foreground">Loading summary…</div>;
   const cell = (label: string, value: string | number) => (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold">{value}</div>
+    <div className="min-w-0 rounded-lg border bg-card p-3">
+      <div className="truncate text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-xl font-semibold" title={String(value)}>{value}</div>
     </div>
   );
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-      {cell("Tournament", s.tournament_name)}
+    <div
+      className="grid gap-3"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}
+    >
+      {cell("Tournament", `FIFA WC 26`)}
       {cell("Matches", `${s.completed_matches}/${s.total_matches}`)}
       {cell("Remaining", s.remaining_matches)}
       {cell("Goals", s.total_goals)}

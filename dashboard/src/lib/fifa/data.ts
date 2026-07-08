@@ -250,6 +250,18 @@ export function formatUtc(utc: string): string {
   return d.toUTCString().replace(":00 GMT", " UTC");
 }
 
+// e.g. "1 July 26 20:00 UTC"
+export function formatUtcShort(utc: string): string {
+  const d = utcToDate(utc);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.getUTCDate();
+  const month = d.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${yy} ${hh}:${mm} UTC`;
+}
+
 // Countdown / elapsed
 export function timeDelta(
   utc: string,
