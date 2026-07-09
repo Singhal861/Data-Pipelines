@@ -71,9 +71,40 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const NAV_ITEMS = [
+  { id: "summary", label: "Summary" },
+  { id: "live", label: "Live & Upcoming" },
+  { id: "bracket", label: "Bracket" },
+  { id: "scorers", label: "Top Scorers" },
+  { id: "golden-boot", label: "Golden Boot" },
+  { id: "points", label: "Points Table" },
+  { id: "finished", label: "Finished Matches" },
+];
+
+function SectionNav() {
+  return (
+    <nav className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <ul className="flex gap-1 overflow-x-auto py-2 pl-2 sm:pl-6 lg:pl-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {NAV_ITEMS.map((item) => (
+            <li key={item.id} className="shrink-0">
+              <a
+                href={`#${item.id}`}
+                className="inline-block whitespace-nowrap rounded-full border border-transparent px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:text-sm"
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </nav>
+  );
+}
+
 function DashboardPage() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen bg-background text-foreground [scroll-behavior:smooth]">
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2">
@@ -90,7 +121,7 @@ function DashboardPage() {
               />
             </div>
             <div>
-              <h1 className="text-2xl font-bold sm:text-3xl">FIFA World Cup 2026 — Dashboard</h1>
+              <h1 className="text-2xl font-bold sm:text-3xl">FIFA World Cup 2026 Dashboard</h1>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
                 Real-time bracket, standings, and player analytics.
               </p>
@@ -101,27 +132,41 @@ function DashboardPage() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <SectionNav />
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8 scroll-mt-16">
+        <section id="summary" className="scroll-mt-20">
           <TournamentSummary />
-        </div>
-        <LiveOrResults />
-        <Section title="Tournament Bracket">
-          <TournamentBracket />
-        </Section>
-        <Section title="Top Scorers">
-          <TopScorers />
-        </Section>
-        <Section title="Golden Boot Race">
-          <GoldenBootProgression />
-        </Section>
-        <Section title="Points Table">
-          <PointsTable />
-        </Section>
-        <Section title="Finished Matches Table">
-          <FinishedMatchesTable />
-        </Section>
+        </section>
+        <section id="live" className="scroll-mt-20">
+          <LiveOrResults />
+        </section>
+        <section id="bracket" className="scroll-mt-20">
+          <Section title="Tournament Bracket">
+            <TournamentBracket />
+          </Section>
+        </section>
+        <section id="scorers" className="scroll-mt-20">
+          <Section title="Top Scorers">
+            <TopScorers />
+          </Section>
+        </section>
+        <section id="golden-boot" className="scroll-mt-20">
+          <Section title="Golden Boot Race">
+            <GoldenBootProgression />
+          </Section>
+        </section>
+        <section id="points" className="scroll-mt-20">
+          <Section title="Points Table">
+            <PointsTable />
+          </Section>
+        </section>
+        <section id="finished" className="scroll-mt-20">
+          <Section title="Finished Matches Table">
+            <FinishedMatchesTable />
+          </Section>
+        </section>
       </div>
+
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">
         <div className="flex flex-col items-center gap-2">
           <p>

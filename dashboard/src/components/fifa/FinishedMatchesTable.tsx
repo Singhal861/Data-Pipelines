@@ -28,10 +28,10 @@ export function FinishedMatchesTable() {
           placeholder="Search team or stage…"
           className="w-full max-w-xs rounded-md border bg-background px-3 py-1.5 text-sm"
         />
-        <div className="overflow-auto rounded-3xl border border-border bg-card p-4 shadow-sm" style={{ maxHeight: 440 }}>
-          <table className="w-full text-sm text-foreground">
-            <thead className="sticky top-0 z-10 bg-background/95 text-left text-xs uppercase tracking-wide text-muted-foreground backdrop-blur">
-              <tr className="border-b border-border">
+        <div className="overflow-auto rounded-lg border bg-card" style={{ maxHeight: 440 }}>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground backdrop-blur">
+              <tr>
                 <th className="px-3 py-2">Date (UTC)</th>
                 <th className="px-3 py-2">Stage</th>
                 <th className="px-3 py-2">Match</th>
