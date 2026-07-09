@@ -385,7 +385,7 @@ export default async function handler(
 
     res.setHeader(
       "Cache-Control",
-      "s-maxage=900, stale-while-revalidate=300"
+      "s-maxage=28800, stale-while-revalidate=600"
     );
 
     return res.status(200).json({
