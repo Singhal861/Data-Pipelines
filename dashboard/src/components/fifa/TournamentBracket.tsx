@@ -40,6 +40,12 @@ function slotInfo(
   const explicitLogo = side === "home" ? m.home_team_logo : m.away_team_logo;
   const isPlaceholderName = typeof explicitName === "string" && explicitName.startsWith("Winner of");
 
+  // 🔧 FIX: For finished matches with explicit team names, ALWAYS use the explicit data from the database
+  // This prevents feeder logic from overriding actual match results
+  if (m.match_status === "Finished" && explicitName && explicitName !== "TBD" && !isPlaceholderName) {
+    return { name: explicitName, logo: explicitLogo, isPlaceholder: false };
+  }
+
   const feeders = feedersByParent.get(m.bracket_position) ?? [];
   if (feeders.length > 0) {
     const feeder = feeders[side === "home" ? 0 : 1];
