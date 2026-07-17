@@ -339,7 +339,11 @@ async function executeSQL(statement: string) {
     console.error("Databricks Error:", json);
     throw new Error(JSON.stringify(json, null, 2));
   }
-
+  // Handle missing or undefined data_array (empty results)
+  if (!json.result || !json.result.data_array) {
+    console.warn("Query returned no data_array:", json);
+    return [];
+  }
   const columns = json.manifest.schema.columns.map(
     (c: any) => c.name
   );

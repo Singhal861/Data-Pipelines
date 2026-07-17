@@ -62,15 +62,47 @@ parsed_matches AS (
     JOIN timezone_ref tz ON m.stadium_id = tz.stadium_id
 ),
 
+-- Get winners from finished matches for deriving upcoming match teams
+finished_match_winners AS (
+    SELECT 
+        bracket_position,
+        winner_team_name,
+        winner_team_id
+    FROM parsed_matches
+    WHERE is_finished = TRUE AND winner_team_name IS NOT NULL
+),
+
 -- Add bracket progression logic for knockout matches
 with_bracket_logic AS (
     SELECT
         pm.*,
         bs.feeds_into_position,
         
+        -- Derive actual team names from finished feeder matches
+        COALESCE(
+            pm.home_team_name,
+            fw1.winner_team_name
+        ) AS derived_home_team_name,
+        
+        COALESCE(
+            pm.away_team_name,
+            fw2.winner_team_name
+        ) AS derived_away_team_name,
+        
+        COALESCE(
+            pm.home_team_id,
+            fw1.winner_team_id
+        ) AS derived_home_team_id,
+        
+        COALESCE(
+            pm.away_team_id,
+            fw2.winner_team_id
+        ) AS derived_away_team_id,
+        
         -- Display names with TBD/Winner progression logic (knockout only)
         CASE 
-            WHEN pm.home_team_name IS NOT NULL THEN pm.home_team_name
+            WHEN COALESCE(pm.home_team_name, fw1.winner_team_name) IS NOT NULL 
+                THEN COALESCE(pm.home_team_name, fw1.winner_team_name)
             WHEN ms.source_positions IS NOT NULL AND SIZE(ms.source_positions) >= 1 
                 THEN CONCAT('Winner of ', ms.source_positions[0])
             WHEN pm.bracket_position IS NOT NULL THEN 'TBD'
@@ -78,7 +110,8 @@ with_bracket_logic AS (
         END AS home_display_name,
         
         CASE 
-            WHEN pm.away_team_name IS NOT NULL THEN pm.away_team_name
+            WHEN COALESCE(pm.away_team_name, fw2.winner_team_name) IS NOT NULL 
+                THEN COALESCE(pm.away_team_name, fw2.winner_team_name)
             WHEN ms.source_positions IS NOT NULL AND SIZE(ms.source_positions) >= 2 
                 THEN CONCAT('Winner of ', ms.source_positions[1])
             WHEN pm.bracket_position IS NOT NULL THEN 'TBD'
@@ -95,9 +128,11 @@ with_bracket_logic AS (
     FROM parsed_matches pm
     LEFT JOIN bracket_structure bs ON pm.match_id = bs.match_id
     LEFT JOIN match_sources ms ON pm.bracket_position = ms.target_position
+    LEFT JOIN finished_match_winners fw1 ON ms.source_positions[0] = fw1.bracket_position
+    LEFT JOIN finished_match_winners fw2 ON ms.source_positions[1] = fw2.bracket_position
 ),
 
--- Add team logos
+-- Add team logos (use derived team names)
 with_team_logos AS (
     SELECT
         wbl.*,
@@ -105,8 +140,8 @@ with_team_logos AS (
         at.team_logo AS away_team_logo,
         wt.team_logo AS winner_team_logo
     FROM with_bracket_logic wbl
-    LEFT JOIN {{ ref('silver_teams') }} ht ON wbl.home_team_name = ht.team_name
-    LEFT JOIN {{ ref('silver_teams') }} at ON wbl.away_team_name = at.team_name
+    LEFT JOIN {{ ref('silver_teams') }} ht ON wbl.derived_home_team_name = ht.team_name
+    LEFT JOIN {{ ref('silver_teams') }} at ON wbl.derived_away_team_name = at.team_name
     LEFT JOIN {{ ref('silver_teams') }} wt ON wbl.winner_team_name = wt.team_name
 ),
 
@@ -125,7 +160,7 @@ match_scorers AS (
     GROUP BY ge.match_id, ge.team_name, ge.scorer_name
 ),
 
--- Combine everything
+-- Combine everything (use derived team names for scorers join)
 final AS (
     SELECT
         wtl.*,
@@ -136,11 +171,11 @@ final AS (
     FROM with_team_logos wtl
     LEFT JOIN match_scorers home_scorer 
         ON wtl.match_id = home_scorer.match_id 
-        AND wtl.home_team_name = home_scorer.team_name 
+        AND wtl.derived_home_team_name = home_scorer.team_name 
         AND home_scorer.scorer_rank = 1
     LEFT JOIN match_scorers away_scorer 
         ON wtl.match_id = away_scorer.match_id 
-        AND wtl.away_team_name = away_scorer.team_name 
+        AND wtl.derived_away_team_name = away_scorer.team_name 
         AND away_scorer.scorer_rank = 1
 )
 
