@@ -4,7 +4,7 @@ const HOST = process.env.DATABRICKS_HOST!;
 const TOKEN = process.env.DATABRICKS_TOKEN!;
 const WAREHOUSE_ID = process.env.DATABRICKS_WAREHOUSE_ID!;
 
-// =========================================
+// ========================================
 // Paste all your SQL queries here
 // =========================================
 const queries = {
